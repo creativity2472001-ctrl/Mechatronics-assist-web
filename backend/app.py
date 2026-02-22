@@ -1,10 +1,15 @@
 """
-MathCore Server - الخادم الرئيسي للمشروع
+MathCore Server - الخادم الرئيسي للمشروع (متوافق مع v3.3)
 """
 
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import os
+import logging
+
+# إعداد التسجيل
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # استيراد MathCore من نفس المجلد
 from mathcore import MathCore
@@ -15,7 +20,7 @@ app = Flask(__name__,
             template_folder='../templates')
 CORS(app)  # للسماح بالتواصل مع الواجهة
 
-# إنشاء كائن MathCore
+# إنشاء كائن MathCore (نسخة v3.3)
 math_core = MathCore()
 
 @app.route('/')
@@ -31,6 +36,9 @@ def solve():
         data = request.json
         question = data.get('question', '').strip()
         language = data.get('language', 'ar')
+        user_id = data.get('user_id', 'default')  # لـ rate limiting
+        
+        logger.info(f"📩 سؤال جديد: {question[:50]}...")
         
         # التحقق من وجود سؤال
         if not question:
@@ -43,14 +51,21 @@ def solve():
                 'confidence': 0
             })
         
-        # حل المسألة باستخدام mathcore.py
-        result = math_core.solve(question, language)
+        # حل المسألة باستخدام mathcore.py (v3.3)
+        result = math_core.solve(
+            question=question,
+            language=language,
+            user_id=user_id,
+            timeout=None  # سيتم تقدير الوقت تلقائياً
+        )
+        
+        logger.info(f"✅ تم الحل: {result.get('simple_answer', '')[:50]}...")
         
         # إرسال النتيجة للواجهة
         return jsonify(result)
         
     except Exception as e:
-        # في حالة حدوث خطأ
+        logger.error(f"❌ خطأ: {str(e)}")
         return jsonify({
             'success': False,
             'simple_answer': 'حدث خطأ في الخادم',
@@ -65,19 +80,32 @@ def health():
     """التحقق من أن الخادم يعمل"""
     return jsonify({
         'status': 'healthy',
-        'engine': 'MathCore v1.1',
+        'engine': 'MathCore v3.3',
+        'timeout_config': math_core.timeout_config,
         'message': 'Server is running'
+    })
+
+@app.route('/api/stats', methods=['GET'])
+def stats():
+    """إحصائيات عن الخادم (اختياري)"""
+    return jsonify({
+        'cpu_cores': math_core.cpu_count,
+        'thread_pool': math_core.thread_pool._max_workers,
+        'process_pool': math_core.process_pool._max_workers,
+        'timeout_config': math_core.timeout_config
     })
 
 # تشغيل الخادم
 if __name__ == '__main__':
-    print("\n" + "="*50)
-    print("🚀 MathCore Server Starting...")
-    print("="*50)
+    print("\n" + "="*60)
+    print("🚀 MathCore Server v3.3 Starting...")
+    print("="*60)
     print(f"📁 المجلد الحالي: {os.getcwd()}")
     print(f"📁 مجلد الواجهة: {app.template_folder}")
-    print(f"📄 ملف الرياضيات: mathcore.py")
+    print(f"📄 ملف الرياضيات: mathcore.py (v3.3)")
+    print(f"⚙️  Timeout config: {math_core.timeout_config}")
+    print(f"🖥️  CPU cores: {math_core.cpu_count}")
     print("\n🌐 رابط الواجهة: http://localhost:5000")
-    print("="*50 + "\n")
+    print("="*60 + "\n")
     
     app.run(debug=True, host='0.0.0.0', port=5000)
