@@ -3,234 +3,421 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MathCore - المساعد الهندسي الذكي</title>
+    <title>MathCore - AI Engineering Assistant</title>
     <style>
-        /* اجمع كل الـ CSS المحسن هنا */
-        body {
-            font-family: 'Segoe UI', Arial, sans-serif;
+        * {
             margin: 0;
             padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Arial, sans-serif;
+        }
+
+        body {
             height: 100vh;
             display: flex;
             flex-direction: column;
-            background-color: #f0f2f5;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
+
+        /* Header */
         #header {
-            background: linear-gradient(135deg, #4CAF50, #45a049);
-            color: white;
-            text-align: center;
-            padding: 15px;
-            font-size: 24px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background: rgba(255, 255, 255, 0.95);
+            color: #333;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
+
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo span {
+            font-size: 14px;
+            display: block;
+            color: #666;
+            -webkit-text-fill-color: #666;
+        }
+
+        .language-switch {
+            display: flex;
+            gap: 10px;
+        }
+
+        .lang-btn {
+            padding: 8px 16px;
+            border: 2px solid #667eea;
+            background: transparent;
+            color: #667eea;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        .lang-btn.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .lang-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        /* Main Container */
         #chat-container {
             display: flex;
             flex: 1;
             overflow: hidden;
+            padding: 20px;
+            gap: 20px;
         }
+
+        /* Input Section */
         #input-section {
-            width: 35%;
-            padding: 15px;
-            background: #fff;
-            border-right: 1px solid #ccc;
+            width: 40%;
+            background: white;
+            border-radius: 20px;
+            padding: 20px;
             display: flex;
             flex-direction: column;
-            box-shadow: 2px 0 4px rgba(0,0,0,0.05);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
         }
-        #domain-selector {
-            margin-bottom: 10px;
-            padding: 10px;
-            border-radius: 5px;
-            border: 2px solid #4CAF50;
-            font-size: 14px;
-            background: white;
-            cursor: pointer;
+
+        .section-title {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 18px;
             font-weight: bold;
         }
+
         #question {
             flex: 1;
             resize: none;
             font-size: 16px;
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid #ccc;
-            margin-bottom: 10px;
+            padding: 15px;
+            border-radius: 10px;
+            border: 2px solid #e0e0e0;
+            margin-bottom: 15px;
             font-family: 'Courier New', monospace;
+            transition: border 0.3s;
         }
+
+        #question:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
         #keyboard-toggle {
-            padding: 10px;
-            margin-bottom: 10px;
+            padding: 12px;
+            margin-bottom: 15px;
             cursor: pointer;
-            border: 1px solid #888;
-            border-radius: 5px;
-            background-color: #e0e0e0;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            background: #f8f9fa;
             text-align: center;
+            font-weight: bold;
+            color: #667eea;
             transition: all 0.3s;
         }
+
         #keyboard-toggle:hover {
-            background-color: #d0d0d0;
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
         }
+
         #math-keyboard {
             display: none;
-            flex-wrap: wrap;
-            background: #f9f9f9;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            max-height: 200px;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            max-height: 250px;
             overflow-y: auto;
-            margin-bottom: 10px;
         }
+
+        .keyboard-category {
+            color: #667eea;
+            font-weight: bold;
+            margin: 10px 0 5px;
+            font-size: 14px;
+        }
+
         .keyboard-row {
-            width: 100%;
             display: flex;
             flex-wrap: wrap;
             gap: 5px;
             margin-bottom: 10px;
         }
+
         .keyboard-row button {
             flex: 1 0 auto;
-            min-width: 40px;
-            margin: 2px;
-            padding: 8px 12px;
+            min-width: 45px;
+            padding: 10px;
             font-size: 16px;
             cursor: pointer;
-            border-radius: 4px;
-            border: 1px solid #888;
-            background-color: #e0e0e0;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            background: white;
             transition: all 0.2s;
+            font-weight: bold;
         }
+
         .keyboard-row button:hover {
-            background-color: #4CAF50;
+            background: #667eea;
             color: white;
             transform: scale(1.05);
+            border-color: #667eea;
         }
+
         #solve-btn {
-            padding: 12px;
+            padding: 15px;
             font-size: 18px;
             border: none;
-            border-radius: 6px;
-            background: linear-gradient(135deg, #4CAF50, #45a049);
+            border-radius: 10px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
             color: white;
             cursor: pointer;
             font-weight: bold;
             transition: all 0.3s;
+            margin-top: 10px;
         }
+
         #solve-btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
         }
+
+        /* Answer Section */
         #answer-section {
             flex: 1;
-            padding: 15px;
+            background: white;
+            border-radius: 20px;
+            padding: 20px;
             overflow-y: auto;
-            background: #eef2f5;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
         }
-        .domain-badge {
-            padding: 10px 15px;
-            border-radius: 25px;
+
+        /* Processing Info */
+        #processing-info {
+            background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+            padding: 15px;
+            border-radius: 10px;
             margin-bottom: 20px;
-            font-weight: bold;
-            text-align: center;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-right: 4px solid #2196F3;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
-        .domain-badge.mathematics { background: #2196F3; color: white; }
-        .domain-badge.physics { background: #FF9800; color: white; }
-        .domain-badge.mechanical { background: #795548; color: white; }
-        .domain-badge.electrical { background: #F44336; color: white; }
-        .domain-badge.electronics { background: #9C27B0; color: white; }
-        .domain-badge.motors { background: #009688; color: white; }
-        .domain-badge.plc { background: #607D8B; color: white; }
+
+        .confidence-badge {
+            background: #2196F3;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        /* View Toggle */
+        .view-toggle {
+            text-align: left;
+            margin-bottom: 15px;
+        }
+
+        .toggle-btn {
+            padding: 8px 16px;
+            border: 2px solid #667eea;
+            background: transparent;
+            color: #667eea;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        .toggle-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        /* Simple View */
+        .solution-card {
+            background: linear-gradient(135deg, #f5f7fa, #f8f9fa);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .solution-card h3 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 20px;
+        }
+
+        #simplified-solution {
+            font-size: 36px;
+            font-weight: bold;
+            color: #4CAF50;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .solution-note {
+            color: #666;
+            font-size: 14px;
+            margin-top: 15px;
+        }
+
+        /* Advanced View */
+        .advanced-section {
+            margin-bottom: 20px;
+        }
+
         .section-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             padding: 12px 15px;
-            background: linear-gradient(135deg, #f5f5f5, #e8e8e8);
-            border-radius: 8px 8px 0 0;
+            background: #f8f9fa;
+            border-radius: 10px 10px 0 0;
             font-weight: bold;
-            border: 1px solid #ddd;
+            border: 1px solid #e0e0e0;
             border-bottom: none;
         }
-        #confidence-badge {
+
+        .badge-code {
             background: #4CAF50;
             color: white;
-            padding: 4px 10px;
+            padding: 3px 10px;
             border-radius: 15px;
             font-size: 12px;
         }
+
+        .badge-ai {
+            background: #FF9800;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+        }
+
         .solution-content, .ai-content {
             padding: 20px;
             background: white;
-            border: 1px solid #ddd;
-            border-top: none;
-            border-radius: 0 0 8px 8px;
-            margin-bottom: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 0 0 10px 10px;
             line-height: 1.8;
-            font-size: 15px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
+
+        .step-item {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-right: 3px solid #667eea;
+        }
+
+        /* Chat Messages */
         #chat-messages {
             margin-top: 20px;
         }
+
         .message {
             margin-bottom: 10px;
             padding: 12px 15px;
             border-radius: 10px;
             max-width: 90%;
             word-wrap: break-word;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
+
         .user-message {
-            background: linear-gradient(135deg, #cce5ff, #b8daff);
-            align-self: flex-end;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
             margin-left: auto;
         }
+
         .bot-message {
-            background: white;
-            align-self: flex-start;
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
         }
+
         .loading {
             text-align: center;
             padding: 30px;
             color: #666;
-            font-size: 16px;
         }
+
         .loading::after {
             content: '...';
             animation: dots 1.5s steps(5, end) infinite;
         }
+
         @keyframes dots {
             0%, 20% { content: '.'; }
             40% { content: '..'; }
             60%, 100% { content: '...'; }
         }
+
+        /* RTL/LTR Support */
+        [dir="rtl"] .view-toggle {
+            text-align: right;
+        }
+
+        [dir="rtl"] .step-item {
+            border-right: none;
+            border-left: 3px solid #667eea;
+        }
+
+        [dir="rtl"] .user-message {
+            margin-left: 0;
+            margin-right: auto;
+        }
     </style>
 </head>
 <body>
-    <div id="header">🚀 MathCore - المساعد الهندسي الذكي</div>
-    
+    <div id="header">
+        <div class="logo">
+            MathCore
+            <span>AI Engineering Assistant</span>
+        </div>
+        <div class="language-switch">
+            <button class="lang-btn active" onclick="switchLanguage('ar')" id="lang-ar">العربية</button>
+            <button class="lang-btn" onclick="switchLanguage('en')" id="lang-en">English</button>
+        </div>
+    </div>
+
     <div id="chat-container">
+        <!-- Input Section -->
         <div id="input-section">
-            <select id="domain-selector">
-                <option value="mathematics">📐 الرياضيات</option>
-                <option value="physics">⚡ الفيزياء</option>
-                <option value="mechanical">🔧 الهندسة الميكانيكية</option>
-                <option value="electrical">💡 الهندسة الكهربائية</option>
-                <option value="electronics">📟 الإلكترونيات</option>
-                <option value="motors">🔄 المحركات الكهربائية</option>
-                <option value="plc">🤖 PLC والتحكم الآلي</option>
-            </select>
-            
+            <div class="section-title" data-ar="📝 أدخل سؤالك" data-en="📝 Enter your question">
+                📝 أدخل سؤالك
+            </div>
             <textarea id="question" placeholder="اكتب سؤالك هنا..."></textarea>
             
             <div id="keyboard-toggle" onclick="toggleKeyboard()">
-                ⌨️ إظهار/إخفاء لوحة الرموز
+                ⌨️ إظهار لوحة الرموز
             </div>
             
             <div id="math-keyboard">
-                <div class="keyboard-row" style="font-weight: bold; color: #4CAF50;">
-                    ➗ العمليات الأساسية
+                <div class="keyboard-category" data-ar="➕ العمليات الأساسية" data-en="➕ Basic Operations">
+                    ➕ العمليات الأساسية
                 </div>
                 <div class="keyboard-row">
                     <button onclick="insertSymbol('+')">+</button>
@@ -242,7 +429,7 @@
                     <button onclick="insertSymbol('√')">√</button>
                 </div>
                 
-                <div class="keyboard-row" style="font-weight: bold; color: #2196F3;">
+                <div class="keyboard-category" data-ar="📐 رموز رياضية" data-en="📐 Math Symbols">
                     📐 رموز رياضية
                 </div>
                 <div class="keyboard-row">
@@ -254,8 +441,8 @@
                     <button onclick="insertSymbol('∇')">∇</button>
                 </div>
                 
-                <div class="keyboard-row" style="font-weight: bold; color: #FF9800;">
-                    ⚡ رموز فيزياء وكهرباء
+                <div class="keyboard-category" data-ar="⚡ فيزياء وكهرباء" data-en="⚡ Physics & Electrical">
+                    ⚡ فيزياء وكهرباء
                 </div>
                 <div class="keyboard-row">
                     <button onclick="insertSymbol('Ω')">Ω</button>
@@ -266,11 +453,9 @@
                     <button onclick="insertSymbol('β')">β</button>
                     <button onclick="insertSymbol('γ')">γ</button>
                     <button onclick="insertSymbol('θ')">θ</button>
-                    <button onclick="insertSymbol('λ')">λ</button>
-                    <button onclick="insertSymbol('ω')">ω</button>
                 </div>
                 
-                <div class="keyboard-row" style="font-weight: bold; color: #795548;">
+                <div class="keyboard-category" data-ar="🔧 رموز ميكانيك" data-en="🔧 Mechanical Symbols">
                     🔧 رموز ميكانيك
                 </div>
                 <div class="keyboard-row">
@@ -279,18 +464,6 @@
                     <button onclick="insertSymbol('ε')">ε</button>
                     <button onclick="insertSymbol('ρ')">ρ</button>
                     <button onclick="insertSymbol('ν')">ν</button>
-                    <button onclick="insertSymbol('∑')">∑</button>
-                    <button onclick="insertSymbol('∏')">∏</button>
-                </div>
-                
-                <div class="keyboard-row">
-                    <button onclick="insertSymbol('(')">(</button>
-                    <button onclick="insertSymbol(')')">)</button>
-                    <button onclick="insertSymbol('≤')">≤</button>
-                    <button onclick="insertSymbol('≥')">≥</button>
-                    <button onclick="insertSymbol('≠')">≠</button>
-                    <button onclick="insertSymbol('∥')">∥</button>
-                    <button onclick="insertSymbol('⊥')">⊥</button>
                 </div>
             </div>
             
@@ -298,35 +471,129 @@
                 🔍 حل المسألة
             </button>
         </div>
-        
+
+        <!-- Answer Section -->
         <div id="answer-section">
-            <div id="solution-container">
-                <div class="section-header">
-                    <span>📊 خطوات الحل</span>
-                    <span id="confidence-badge">99% دقة</span>
-                </div>
-                <div id="solution-steps" class="solution-content">
-                    اكتب سؤالك وسأقوم بحله خطوة بخطوة
+            <!-- Processing Info (يظهر بعد الحل) -->
+            <div id="processing-info" style="display: none;">
+                <span id="detection-text">🧠 تم تحليل سؤالك كـ <strong>مسألة رياضية</strong></span>
+                <span class="confidence-badge" id="confidence-text">98% دقة</span>
+            </div>
+
+            <!-- View Toggle -->
+            <div class="view-toggle">
+                <button class="toggle-btn" onclick="toggleViewMode()" id="view-toggle-btn">
+                    👁️ عرض تفصيلي
+                </button>
+            </div>
+
+            <!-- Simple View (الافتراضي) -->
+            <div id="simple-view">
+                <div class="solution-card">
+                    <h3 data-ar="📋 الحل" data-en="📋 Solution">📋 الحل</h3>
+                    <div id="simplified-solution">
+                        <span data-ar="اكتب سؤالك لتبدأ" data-en="Enter your question to start">
+                            اكتب سؤالك لتبدأ
+                        </span>
+                    </div>
+                    <p class="solution-note" data-ar="✨ سيتم حل المسألة بدقة عالية" data-en="✨ Your problem will be solved with high accuracy">
+                        ✨ سيتم حل المسألة بدقة عالية
+                    </p>
                 </div>
             </div>
-            
-            <div id="ai-container">
-                <div class="section-header">
-                    <span>🤖 شرح الذكاء الاصطناعي</span>
+
+            <!-- Advanced View (يظهر عند الضغط على الزر) -->
+            <div id="advanced-view" style="display: none;">
+                <div class="advanced-section">
+                    <div class="section-header">
+                        <span data-ar="📊 خطوات الحل (من الكود)" data-en="📊 Solution Steps (Code)">📊 خطوات الحل (من الكود)</span>
+                        <span class="badge-code">99% دقة</span>
+                    </div>
+                    <div id="solution-steps" class="solution-content">
+                        <div class="step-item">الخطوة 1: ...</div>
+                        <div class="step-item">الخطوة 2: ...</div>
+                    </div>
                 </div>
-                <div id="ai-explanation" class="ai-content">
-                    هنا سيظهر شرح مفصل للمسألة
+                
+                <div class="advanced-section">
+                    <div class="section-header">
+                        <span data-ar="🤖 شرح الذكاء الاصطناعي" data-en="🤖 AI Explanation">🤖 شرح الذكاء الاصطناعي</span>
+                        <span class="badge-ai">شرح مبسط</span>
+                    </div>
+                    <div id="ai-explanation" class="ai-content">
+                        هنا سيظهر شرح مفصل للمسألة
+                    </div>
                 </div>
             </div>
-            
+
+            <!-- Chat Messages -->
             <div id="chat-messages"></div>
         </div>
     </div>
 
     <script>
+        // ========== إدارة اللغة ==========
+        let currentLang = 'ar';
+        
+        function switchLanguage(lang) {
+            currentLang = lang;
+            
+            // تحديث أزرار اللغة
+            document.getElementById('lang-ar').classList.remove('active');
+            document.getElementById('lang-en').classList.remove('active');
+            document.getElementById(`lang-${lang}`).classList.add('active');
+            
+            // تحديث اتجاه الصفحة
+            document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+            document.documentElement.lang = lang;
+            
+            // تحديث النصوص
+            updateTexts();
+        }
+        
+        function updateTexts() {
+            // تحديث كل العناصر التي لديها data-ar و data-en
+            document.querySelectorAll('[data-ar][data-en]').forEach(element => {
+                element.textContent = element.getAttribute(`data-${currentLang}`);
+            });
+            
+            // تحديث الـ placeholders
+            const questionInput = document.getElementById('question');
+            if (currentLang === 'ar') {
+                questionInput.placeholder = 'اكتب سؤالك هنا...';
+            } else {
+                questionInput.placeholder = 'Enter your question here...';
+            }
+            
+            // تحديث نص زر لوحة المفاتيح
+            const keyboardToggle = document.getElementById('keyboard-toggle');
+            if (currentLang === 'ar') {
+                keyboardToggle.innerHTML = '⌨️ إظهار لوحة الرموز';
+            } else {
+                keyboardToggle.innerHTML = '⌨️ Show Keyboard';
+            }
+            
+            // تحديث نص زر الحل
+            const solveBtn = document.getElementById('solve-btn');
+            if (currentLang === 'ar') {
+                solveBtn.innerHTML = '🔍 حل المسألة';
+            } else {
+                solveBtn.innerHTML = '🔍 Solve';
+            }
+        }
+
+        // ========== لوحة المفاتيح ==========
         function toggleKeyboard() {
             const kb = document.getElementById('math-keyboard');
-            kb.style.display = kb.style.display === 'flex' ? 'none' : 'flex';
+            if (kb.style.display === 'flex' || kb.style.display === 'block') {
+                kb.style.display = 'none';
+                document.getElementById('keyboard-toggle').innerHTML = 
+                    currentLang === 'ar' ? '⌨️ إظهار لوحة الرموز' : '⌨️ Show Keyboard';
+            } else {
+                kb.style.display = 'block';
+                document.getElementById('keyboard-toggle').innerHTML = 
+                    currentLang === 'ar' ? '⌨️ إخفاء لوحة الرموز' : '⌨️ Hide Keyboard';
+            }
         }
 
         function insertSymbol(sym) {
@@ -339,12 +606,33 @@
             textarea.focus();
         }
 
+        // ========== إدارة العرض (Simple/Advanced) ==========
+        let viewMode = 'simple';
+
+        function toggleViewMode() {
+            const simpleView = document.getElementById('simple-view');
+            const advancedView = document.getElementById('advanced-view');
+            const toggleBtn = document.getElementById('view-toggle-btn');
+            
+            if (viewMode === 'simple') {
+                simpleView.style.display = 'none';
+                advancedView.style.display = 'block';
+                toggleBtn.innerHTML = currentLang === 'ar' ? '🔍 عرض مبسط' : '🔍 Simple View';
+                viewMode = 'advanced';
+            } else {
+                simpleView.style.display = 'block';
+                advancedView.style.display = 'none';
+                toggleBtn.innerHTML = currentLang === 'ar' ? '👁️ عرض تفصيلي' : '👁️ Detailed View';
+                viewMode = 'simple';
+            }
+        }
+
+        // ========== إرسال السؤال ==========
         function sendQuestion() {
             const question = document.getElementById('question').value.trim();
-            const domain = document.getElementById('domain-selector').value;
             
             if (!question) {
-                alert("الرجاء إدخال السؤال!");
+                alert(currentLang === 'ar' ? 'الرجاء إدخال السؤال!' : 'Please enter your question!');
                 return;
             }
             
@@ -354,117 +642,67 @@
             // إظهار مؤشر التحميل
             showLoading();
             
-            // إرسال للخادم
-            fetch('/solve', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    question: question,
-                    domain: domain
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
+            // محاكاة استجابة من الخادم (للاختبار)
+            setTimeout(() => {
                 hideLoading();
-                displayResult(data, domain);
-            })
-            .catch(error => {
-                hideLoading();
-                appendMessage('⚠️ خطأ في الاتصال بالخادم', 'bot');
-                console.error('Error:', error);
-            });
-            
-            document.getElementById('question').value = '';
+                
+                // بيانات تجريبية
+                const mockData = {
+                    domain: 'mathematics',
+                    confidence: 98,
+                    simple_answer: 'x = 2, x = 3',
+                    steps: [
+                        'نكتب المعادلة: x² - 5x + 6 = 0',
+                        'نحلل المعادلة: (x - 2)(x - 3) = 0',
+                        'إما x - 2 = 0 ⇒ x = 2',
+                        'أو x - 3 = 0 ⇒ x = 3'
+                    ],
+                    ai_explanation: 'هذه معادلة تربيعية بسيطة. الحلول هي x=2 و x=3. يمكن التحقق بالتعويض.'
+                };
+                
+                displayResults(mockData);
+            }, 1500);
         }
 
-        function displayResult(data, domain) {
-            // عرض معلومات التخصص
-            displayDomainInfo(domain, data.confidence || 99);
+        function displayResults(data) {
+            // إظهار معلومات التحليل
+            document.getElementById('processing-info').style.display = 'flex';
             
-            // عرض خطوات الحل
-            displaySolution(data.solution || {
-                steps: ['لم يتم توفير خطوات الحل'],
-                answer: data.answer || 'جاري التطوير...'
-            });
-            
-            // عرض شرح الذكاء الاصطناعي
-            displayAIExplanation(data.ai_explanation || 'سيتم إضافة شرح الذكاء الاصطناعي قريباً');
-        }
-
-        function displayDomainInfo(domain, confidence) {
             const domainNames = {
-                'mathematics': 'الرياضيات',
-                'physics': 'الفيزياء',
-                'mechanical': 'الهندسة الميكانيكية',
-                'electrical': 'الهندسة الكهربائية',
-                'electronics': 'الإلكترونيات',
-                'motors': 'المحركات الكهربائية',
-                'plc': 'PLC والتحكم الآلي'
+                'mathematics': { ar: 'رياضية', en: 'mathematics' },
+                'physics': { ar: 'فيزيائية', en: 'physics' },
+                'electrical': { ar: 'كهربائية', en: 'electrical' }
             };
             
-            // إزالة أي badge قديم
-            const oldBadge = document.querySelector('.domain-badge');
-            if (oldBadge) oldBadge.remove();
+            document.getElementById('detection-text').innerHTML = 
+                `🧠 ${currentLang === 'ar' ? 'تم تحليل سؤالك كـ' : 'Detected as'} <strong>${domainNames[data.domain]?.[currentLang] || data.domain}</strong> ${currentLang === 'ar' ? 'مسألة' : 'problem'}`;
             
-            const badge = document.createElement('div');
-            badge.className = `domain-badge ${domain}`;
-            badge.innerHTML = `
-                <span>${domainNames[domain] || domain}</span>
-                <span style="margin-right: 15px;">🔍 دقة: ${confidence}%</span>
-            `;
+            document.getElementById('confidence-text').textContent = 
+                `${currentLang === 'ar' ? data.confidence + '% دقة' : data.confidence + '% confidence'}`;
             
-            document.getElementById('answer-section').insertBefore(
-                badge, 
-                document.getElementById('solution-container')
-            );
+            // تحديث العرض المبسط
+            document.getElementById('simplified-solution').innerHTML = data.simple_answer;
             
-            // تحديث badge الثقة
-            document.getElementById('confidence-badge').textContent = `${confidence}% دقة`;
-        }
-
-        function displaySolution(solution) {
-            const steps = document.getElementById('solution-steps');
-            steps.innerHTML = '';
+            // تحديث العرض المتقدم
+            const stepsHtml = data.steps.map((step, i) => 
+                `<div class="step-item">${currentLang === 'ar' ? 'الخطوة ' + (i+1) : 'Step ' + (i+1)}: ${step}</div>`
+            ).join('');
+            document.getElementById('solution-steps').innerHTML = stepsHtml;
             
-            if (solution.steps && Array.isArray(solution.steps)) {
-                solution.steps.forEach((step, index) => {
-                    const stepDiv = document.createElement('div');
-                    stepDiv.style.marginBottom = '15px';
-                    stepDiv.style.padding = '8px';
-                    stepDiv.style.borderRight = '4px solid #4CAF50';
-                    stepDiv.style.paddingRight = '15px';
-                    stepDiv.style.background = '#f9f9f9';
-                    stepDiv.style.borderRadius = '0 5px 5px 0';
-                    stepDiv.innerHTML = `<strong>الخطوة ${index + 1}:</strong> ${step}`;
-                    steps.appendChild(stepDiv);
-                });
-            }
-            
-            // إضافة الجواب النهائي
-            const answerDiv = document.createElement('div');
-            answerDiv.style.marginTop = '20px';
-            answerDiv.style.padding = '15px';
-            answerDiv.style.background = '#e8f5e9';
-            answerDiv.style.borderRadius = '8px';
-            answerDiv.style.border = '1px solid #4CAF50';
-            answerDiv.innerHTML = `<strong>✅ الجواب النهائي:</strong> ${solution.answer}`;
-            steps.appendChild(answerDiv);
-        }
-
-        function displayAIExplanation(explanation) {
-            const aiDiv = document.getElementById('ai-explanation');
-            aiDiv.innerHTML = explanation;
+            document.getElementById('ai-explanation').innerHTML = data.ai_explanation;
         }
 
         function showLoading() {
+            document.getElementById('simplified-solution').innerHTML = 
+                '<div class="loading">جاري الحل</div>';
             document.getElementById('solution-steps').innerHTML = 
-                '<div class="loading">جاري حل المسألة</div>';
+                '<div class="loading">جاري الحل...</div>';
             document.getElementById('ai-explanation').innerHTML = 
-                '<div class="loading">جاري تحضير الشرح</div>';
+                '<div class="loading">جاري تحضير الشرح...</div>';
         }
 
         function hideLoading() {
-            // ستستبدل بالمحتوى الحقيقي في displayResult
+            // ستستبدل بالمحتوى الحقيقي في displayResults
         }
 
         function appendMessage(text, sender) {
@@ -473,8 +711,6 @@
             msgDiv.className = `message ${sender}-message`;
             msgDiv.textContent = text;
             messages.appendChild(msgDiv);
-            
-            // التمرير لآخر رسالة
             messages.scrollTop = messages.scrollHeight;
         }
     </script>
