@@ -1,191 +1,482 @@
 <!DOCTYPE html>
 <html lang="ar">
 <head>
-<meta charset="UTF-8">
-<title>MathCore Chat Interface</title>
-<style>
-    body {
-        font-family: Arial, sans-serif;
-        margin: 0;
-        padding: 0;
-        height: 100vh;
-        display: flex;
-        flex-direction: column;
-        background-color: #f0f2f5;
-    }
-    #header {
-        background-color: #4CAF50;
-        color: white;
-        text-align: center;
-        padding: 15px;
-        font-size: 24px;
-    }
-    #chat-container {
-        display: flex;
-        flex: 1;
-        overflow: hidden;
-    }
-    #input-section {
-        width: 35%;
-        padding: 15px;
-        background: #fff;
-        border-right: 1px solid #ccc;
-        display: flex;
-        flex-direction: column;
-    }
-    #question {
-        flex: 1;
-        resize: none;
-        font-size: 16px;
-        padding: 10px;
-        border-radius: 5px;
-        border: 1px solid #ccc;
-        margin-bottom: 10px;
-    }
-    #keyboard-toggle {
-        padding: 10px;
-        margin-bottom: 10px;
-        cursor: pointer;
-        border: 1px solid #888;
-        border-radius: 5px;
-        background-color: #e0e0e0;
-        text-align: center;
-    }
-    #math-keyboard {
-        display: none;
-        flex-wrap: wrap;
-        background: #f9f9f9;
-        padding: 10px;
-        border: 1px solid #ccc;
-        border-radius: 5px;
-        max-height: 150px;
-        overflow-y: auto;
-    }
-    #math-keyboard button {
-        margin: 2px;
-        padding: 8px 12px;
-        font-size: 16px;
-        cursor: pointer;
-        border-radius: 4px;
-        border: 1px solid #888;
-        background-color: #e0e0e0;
-    }
-    #math-keyboard button:hover {
-        background-color: #d0d0d0;
-    }
-    #solve-btn {
-        padding: 12px;
-        font-size: 18px;
-        border: none;
-        border-radius: 6px;
-        background-color: #4CAF50;
-        color: white;
-        cursor: pointer;
-    }
-    #solve-btn:hover {
-        background-color: #45a049;
-    }
-    #answer-section {
-        flex: 1;
-        padding: 15px;
-        overflow-y: auto;
-        background: #eef2f5;
-    }
-    .message {
-        margin-bottom: 10px;
-        padding: 10px;
-        border-radius: 6px;
-        max-width: 90%;
-        word-wrap: break-word;
-    }
-    .user-message {
-        background-color: #cce5ff;
-        align-self: flex-end;
-    }
-    .bot-message {
-        background-color: #fff;
-        align-self: flex-start;
-    }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MathCore - المساعد الهندسي الذكي</title>
+    <style>
+        /* اجمع كل الـ CSS المحسن هنا */
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background-color: #f0f2f5;
+        }
+        #header {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+            text-align: center;
+            padding: 15px;
+            font-size: 24px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        #chat-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        #input-section {
+            width: 35%;
+            padding: 15px;
+            background: #fff;
+            border-right: 1px solid #ccc;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 2px 0 4px rgba(0,0,0,0.05);
+        }
+        #domain-selector {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            border: 2px solid #4CAF50;
+            font-size: 14px;
+            background: white;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        #question {
+            flex: 1;
+            resize: none;
+            font-size: 16px;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            margin-bottom: 10px;
+            font-family: 'Courier New', monospace;
+        }
+        #keyboard-toggle {
+            padding: 10px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            border: 1px solid #888;
+            border-radius: 5px;
+            background-color: #e0e0e0;
+            text-align: center;
+            transition: all 0.3s;
+        }
+        #keyboard-toggle:hover {
+            background-color: #d0d0d0;
+        }
+        #math-keyboard {
+            display: none;
+            flex-wrap: wrap;
+            background: #f9f9f9;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+        }
+        .keyboard-row {
+            width: 100%;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+        .keyboard-row button {
+            flex: 1 0 auto;
+            min-width: 40px;
+            margin: 2px;
+            padding: 8px 12px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 4px;
+            border: 1px solid #888;
+            background-color: #e0e0e0;
+            transition: all 0.2s;
+        }
+        .keyboard-row button:hover {
+            background-color: #4CAF50;
+            color: white;
+            transform: scale(1.05);
+        }
+        #solve-btn {
+            padding: 12px;
+            font-size: 18px;
+            border: none;
+            border-radius: 6px;
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        #solve-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        #answer-section {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            background: #eef2f5;
+        }
+        .domain-badge {
+            padding: 10px 15px;
+            border-radius: 25px;
+            margin-bottom: 20px;
+            font-weight: bold;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .domain-badge.mathematics { background: #2196F3; color: white; }
+        .domain-badge.physics { background: #FF9800; color: white; }
+        .domain-badge.mechanical { background: #795548; color: white; }
+        .domain-badge.electrical { background: #F44336; color: white; }
+        .domain-badge.electronics { background: #9C27B0; color: white; }
+        .domain-badge.motors { background: #009688; color: white; }
+        .domain-badge.plc { background: #607D8B; color: white; }
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 15px;
+            background: linear-gradient(135deg, #f5f5f5, #e8e8e8);
+            border-radius: 8px 8px 0 0;
+            font-weight: bold;
+            border: 1px solid #ddd;
+            border-bottom: none;
+        }
+        #confidence-badge {
+            background: #4CAF50;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+        }
+        .solution-content, .ai-content {
+            padding: 20px;
+            background: white;
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            margin-bottom: 20px;
+            line-height: 1.8;
+            font-size: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        #chat-messages {
+            margin-top: 20px;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 12px 15px;
+            border-radius: 10px;
+            max-width: 90%;
+            word-wrap: break-word;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        .user-message {
+            background: linear-gradient(135deg, #cce5ff, #b8daff);
+            align-self: flex-end;
+            margin-left: auto;
+        }
+        .bot-message {
+            background: white;
+            align-self: flex-start;
+        }
+        .loading {
+            text-align: center;
+            padding: 30px;
+            color: #666;
+            font-size: 16px;
+        }
+        .loading::after {
+            content: '...';
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+    </style>
 </head>
 <body>
-
-<div id="header">MathCore Assistant</div>
-
-<div id="chat-container">
-    <div id="input-section">
-        <textarea id="question" placeholder="اكتب سؤالك الرياضي هنا..."></textarea>
-        <div id="keyboard-toggle" onclick="toggleKeyboard()">إظهار/إخفاء لوحة الرموز</div>
-        <div id="math-keyboard">
-            <!-- جميع الرموز الرياضية الأساسية -->
-            <button onclick="insertSymbol('π')">π</button>
-            <button onclick="insertSymbol('√')">√</button>
-            <button onclick="insertSymbol('^')">^</button>
-            <button onclick="insertSymbol('∞')">∞</button>
-            <button onclick="insertSymbol('Σ')">Σ</button>
-            <button onclick="insertSymbol('Δ')">Δ</button>
-            <button onclick="insertSymbol('+')">+</button>
-            <button onclick="insertSymbol('-')">-</button>
-            <button onclick="insertSymbol('*')">*</button>
-            <button onclick="insertSymbol('/')">/</button>
-            <button onclick="insertSymbol('(')">(</button>
-            <button onclick="insertSymbol(')')">)</button>
-            <button onclick="insertSymbol('=')">=</button>
-            <button onclick="insertSymbol('≤')">≤</button>
-            <button onclick="insertSymbol('≥')">≥</button>
-            <button onclick="insertSymbol('≠')">≠</button>
-            <button onclick="insertSymbol('∫')">∫</button>
-            <button onclick="insertSymbol('∂')">∂</button>
-            <button onclick="insertSymbol('θ')">θ</button>
-            <button onclick="insertSymbol('λ')">λ</button>
-            <button onclick="insertSymbol('α')">α</button>
-            <button onclick="insertSymbol('β')">β</button>
-            <button onclick="insertSymbol('γ')">γ</button>
+    <div id="header">🚀 MathCore - المساعد الهندسي الذكي</div>
+    
+    <div id="chat-container">
+        <div id="input-section">
+            <select id="domain-selector">
+                <option value="mathematics">📐 الرياضيات</option>
+                <option value="physics">⚡ الفيزياء</option>
+                <option value="mechanical">🔧 الهندسة الميكانيكية</option>
+                <option value="electrical">💡 الهندسة الكهربائية</option>
+                <option value="electronics">📟 الإلكترونيات</option>
+                <option value="motors">🔄 المحركات الكهربائية</option>
+                <option value="plc">🤖 PLC والتحكم الآلي</option>
+            </select>
+            
+            <textarea id="question" placeholder="اكتب سؤالك هنا..."></textarea>
+            
+            <div id="keyboard-toggle" onclick="toggleKeyboard()">
+                ⌨️ إظهار/إخفاء لوحة الرموز
+            </div>
+            
+            <div id="math-keyboard">
+                <div class="keyboard-row" style="font-weight: bold; color: #4CAF50;">
+                    ➗ العمليات الأساسية
+                </div>
+                <div class="keyboard-row">
+                    <button onclick="insertSymbol('+')">+</button>
+                    <button onclick="insertSymbol('-')">-</button>
+                    <button onclick="insertSymbol('*')">×</button>
+                    <button onclick="insertSymbol('/')">÷</button>
+                    <button onclick="insertSymbol('=')">=</button>
+                    <button onclick="insertSymbol('^')">^</button>
+                    <button onclick="insertSymbol('√')">√</button>
+                </div>
+                
+                <div class="keyboard-row" style="font-weight: bold; color: #2196F3;">
+                    📐 رموز رياضية
+                </div>
+                <div class="keyboard-row">
+                    <button onclick="insertSymbol('π')">π</button>
+                    <button onclick="insertSymbol('∞')">∞</button>
+                    <button onclick="insertSymbol('Σ')">Σ</button>
+                    <button onclick="insertSymbol('∫')">∫</button>
+                    <button onclick="insertSymbol('∂')">∂</button>
+                    <button onclick="insertSymbol('∇')">∇</button>
+                </div>
+                
+                <div class="keyboard-row" style="font-weight: bold; color: #FF9800;">
+                    ⚡ رموز فيزياء وكهرباء
+                </div>
+                <div class="keyboard-row">
+                    <button onclick="insertSymbol('Ω')">Ω</button>
+                    <button onclick="insertSymbol('µ')">µ</button>
+                    <button onclick="insertSymbol('∠')">∠</button>
+                    <button onclick="insertSymbol('°')">°</button>
+                    <button onclick="insertSymbol('α')">α</button>
+                    <button onclick="insertSymbol('β')">β</button>
+                    <button onclick="insertSymbol('γ')">γ</button>
+                    <button onclick="insertSymbol('θ')">θ</button>
+                    <button onclick="insertSymbol('λ')">λ</button>
+                    <button onclick="insertSymbol('ω')">ω</button>
+                </div>
+                
+                <div class="keyboard-row" style="font-weight: bold; color: #795548;">
+                    🔧 رموز ميكانيك
+                </div>
+                <div class="keyboard-row">
+                    <button onclick="insertSymbol('σ')">σ</button>
+                    <button onclick="insertSymbol('τ')">τ</button>
+                    <button onclick="insertSymbol('ε')">ε</button>
+                    <button onclick="insertSymbol('ρ')">ρ</button>
+                    <button onclick="insertSymbol('ν')">ν</button>
+                    <button onclick="insertSymbol('∑')">∑</button>
+                    <button onclick="insertSymbol('∏')">∏</button>
+                </div>
+                
+                <div class="keyboard-row">
+                    <button onclick="insertSymbol('(')">(</button>
+                    <button onclick="insertSymbol(')')">)</button>
+                    <button onclick="insertSymbol('≤')">≤</button>
+                    <button onclick="insertSymbol('≥')">≥</button>
+                    <button onclick="insertSymbol('≠')">≠</button>
+                    <button onclick="insertSymbol('∥')">∥</button>
+                    <button onclick="insertSymbol('⊥')">⊥</button>
+                </div>
+            </div>
+            
+            <button id="solve-btn" onclick="sendQuestion()">
+                🔍 حل المسألة
+            </button>
         </div>
-        <button id="solve-btn" onclick="sendQuestion()">حل المعادلة</button>
+        
+        <div id="answer-section">
+            <div id="solution-container">
+                <div class="section-header">
+                    <span>📊 خطوات الحل</span>
+                    <span id="confidence-badge">99% دقة</span>
+                </div>
+                <div id="solution-steps" class="solution-content">
+                    اكتب سؤالك وسأقوم بحله خطوة بخطوة
+                </div>
+            </div>
+            
+            <div id="ai-container">
+                <div class="section-header">
+                    <span>🤖 شرح الذكاء الاصطناعي</span>
+                </div>
+                <div id="ai-explanation" class="ai-content">
+                    هنا سيظهر شرح مفصل للمسألة
+                </div>
+            </div>
+            
+            <div id="chat-messages"></div>
+        </div>
     </div>
-    <div id="answer-section"></div>
-</div>
 
-<script>
-function toggleKeyboard() {
-    const kb = document.getElementById('math-keyboard');
-    kb.style.display = kb.style.display === 'flex' ? 'none' : 'flex';
-}
+    <script>
+        function toggleKeyboard() {
+            const kb = document.getElementById('math-keyboard');
+            kb.style.display = kb.style.display === 'flex' ? 'none' : 'flex';
+        }
 
-function insertSymbol(sym) {
-    const textarea = document.getElementById('question');
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const text = textarea.value;
-    textarea.value = text.slice(0, start) + sym + text.slice(end);
-    textarea.selectionStart = textarea.selectionEnd = start + sym.length;
-    textarea.focus();
-}
+        function insertSymbol(sym) {
+            const textarea = document.getElementById('question');
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const text = textarea.value;
+            textarea.value = text.slice(0, start) + sym + text.slice(end);
+            textarea.selectionStart = textarea.selectionEnd = start + sym.length;
+            textarea.focus();
+        }
 
-function sendQuestion() {
-    const question = document.getElementById('question').value.trim();
-    if (!question) {
-        alert("الرجاء إدخال السؤال!");
-        return;
-    }
-    // عرض الرسالة في واجهة المحادثة
-    const answerSection = document.getElementById('answer-section');
-    const userMsg = document.createElement('div');
-    userMsg.className = 'message user-message';
-    userMsg.textContent = question;
-    answerSection.appendChild(userMsg);
+        function sendQuestion() {
+            const question = document.getElementById('question').value.trim();
+            const domain = document.getElementById('domain-selector').value;
+            
+            if (!question) {
+                alert("الرجاء إدخال السؤال!");
+                return;
+            }
+            
+            // عرض سؤال المستخدم
+            appendMessage(question, 'user');
+            
+            // إظهار مؤشر التحميل
+            showLoading();
+            
+            // إرسال للخادم
+            fetch('/solve', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    question: question,
+                    domain: domain
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideLoading();
+                displayResult(data, domain);
+            })
+            .catch(error => {
+                hideLoading();
+                appendMessage('⚠️ خطأ في الاتصال بالخادم', 'bot');
+                console.error('Error:', error);
+            });
+            
+            document.getElementById('question').value = '';
+        }
 
-    // رد وهمي مؤقت (لاحقًا يمكن ربط MathCore)
-    const botMsg = document.createElement('div');
-    botMsg.className = 'message bot-message';
-    botMsg.textContent = "هنا سيظهر حل MathCore...";
-    answerSection.appendChild(botMsg);
+        function displayResult(data, domain) {
+            // عرض معلومات التخصص
+            displayDomainInfo(domain, data.confidence || 99);
+            
+            // عرض خطوات الحل
+            displaySolution(data.solution || {
+                steps: ['لم يتم توفير خطوات الحل'],
+                answer: data.answer || 'جاري التطوير...'
+            });
+            
+            // عرض شرح الذكاء الاصطناعي
+            displayAIExplanation(data.ai_explanation || 'سيتم إضافة شرح الذكاء الاصطناعي قريباً');
+        }
 
-    answerSection.scrollTop = answerSection.scrollHeight;
-    document.getElementById('question').value = '';
-}
-</script>
+        function displayDomainInfo(domain, confidence) {
+            const domainNames = {
+                'mathematics': 'الرياضيات',
+                'physics': 'الفيزياء',
+                'mechanical': 'الهندسة الميكانيكية',
+                'electrical': 'الهندسة الكهربائية',
+                'electronics': 'الإلكترونيات',
+                'motors': 'المحركات الكهربائية',
+                'plc': 'PLC والتحكم الآلي'
+            };
+            
+            // إزالة أي badge قديم
+            const oldBadge = document.querySelector('.domain-badge');
+            if (oldBadge) oldBadge.remove();
+            
+            const badge = document.createElement('div');
+            badge.className = `domain-badge ${domain}`;
+            badge.innerHTML = `
+                <span>${domainNames[domain] || domain}</span>
+                <span style="margin-right: 15px;">🔍 دقة: ${confidence}%</span>
+            `;
+            
+            document.getElementById('answer-section').insertBefore(
+                badge, 
+                document.getElementById('solution-container')
+            );
+            
+            // تحديث badge الثقة
+            document.getElementById('confidence-badge').textContent = `${confidence}% دقة`;
+        }
 
+        function displaySolution(solution) {
+            const steps = document.getElementById('solution-steps');
+            steps.innerHTML = '';
+            
+            if (solution.steps && Array.isArray(solution.steps)) {
+                solution.steps.forEach((step, index) => {
+                    const stepDiv = document.createElement('div');
+                    stepDiv.style.marginBottom = '15px';
+                    stepDiv.style.padding = '8px';
+                    stepDiv.style.borderRight = '4px solid #4CAF50';
+                    stepDiv.style.paddingRight = '15px';
+                    stepDiv.style.background = '#f9f9f9';
+                    stepDiv.style.borderRadius = '0 5px 5px 0';
+                    stepDiv.innerHTML = `<strong>الخطوة ${index + 1}:</strong> ${step}`;
+                    steps.appendChild(stepDiv);
+                });
+            }
+            
+            // إضافة الجواب النهائي
+            const answerDiv = document.createElement('div');
+            answerDiv.style.marginTop = '20px';
+            answerDiv.style.padding = '15px';
+            answerDiv.style.background = '#e8f5e9';
+            answerDiv.style.borderRadius = '8px';
+            answerDiv.style.border = '1px solid #4CAF50';
+            answerDiv.innerHTML = `<strong>✅ الجواب النهائي:</strong> ${solution.answer}`;
+            steps.appendChild(answerDiv);
+        }
+
+        function displayAIExplanation(explanation) {
+            const aiDiv = document.getElementById('ai-explanation');
+            aiDiv.innerHTML = explanation;
+        }
+
+        function showLoading() {
+            document.getElementById('solution-steps').innerHTML = 
+                '<div class="loading">جاري حل المسألة</div>';
+            document.getElementById('ai-explanation').innerHTML = 
+                '<div class="loading">جاري تحضير الشرح</div>';
+        }
+
+        function hideLoading() {
+            // ستستبدل بالمحتوى الحقيقي في displayResult
+        }
+
+        function appendMessage(text, sender) {
+            const messages = document.getElementById('chat-messages');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${sender}-message`;
+            msgDiv.textContent = text;
+            messages.appendChild(msgDiv);
+            
+            // التمرير لآخر رسالة
+            messages.scrollTop = messages.scrollHeight;
+        }
+    </script>
 </body>
 </html>
