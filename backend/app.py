@@ -1,5 +1,6 @@
 """
 MathCore Server - الخادم الرئيسي للمشروع (متوافق مع v3.3)
+نسخة معدلة بالكامل - مسارات مضبوطة لـ Render
 """
 
 from flask import Flask, request, jsonify, send_from_directory
@@ -14,10 +15,11 @@ logger = logging.getLogger(__name__)
 # استيراد MathCore من نفس المجلد
 from mathcore import MathCore
 
-# إنشاء تطبيق Flask - المسارات المعدلة ✅
+# ✅ المسار الصحيح للـ templates (خارج مجلد backend)
 app = Flask(__name__, 
-            static_folder='templates',      # ✅ تم التعديل
-            template_folder='templates')     # ✅ تم التعديل
+            static_folder='../templates',      # ✅ رجوع للخلف
+            template_folder='../templates')     # ✅ رجوع للخلف
+
 CORS(app)  # للسماح بالتواصل مع الواجهة
 
 # إنشاء كائن MathCore (نسخة v3.3)
@@ -26,8 +28,8 @@ math_core = MathCore()
 @app.route('/')
 def index():
     """عرض الصفحة الرئيسية"""
-    # ✅ تم التعديل - مسار مباشر
-    return send_from_directory('templates', 'index.html')
+    # ✅ مسار مباشر للملف خارج backend
+    return send_from_directory('../templates', 'index.html')
 
 @app.route('/api/solve', methods=['POST'])
 def solve():
@@ -96,13 +98,41 @@ def stats():
         'timeout_config': math_core.timeout_config
     })
 
+@app.route('/test')
+def test():
+    """مسار تجريبي للتأكد من أن الخادم شغال"""
+    return "✅ Flask is working! MathCore Server is running."
+
+@app.route('/debug/files')
+def debug_files():
+    """عرض هيكل الملفات للتشخيص"""
+    import os
+    result = "<h1>📁 File Structure</h1><pre>"
+    
+    def list_files(path, indent=0):
+        try:
+            items = os.listdir(path)
+            for item in items:
+                full_path = os.path.join(path, item)
+                result = "  " * indent + "📄 " if os.path.isfile(full_path) else "  " * indent + "📂 "
+                result += item + "\n"
+                if os.path.isdir(full_path):
+                    result += list_files(full_path, indent + 1)
+            return result
+        except:
+            return "  " * indent + "❌ Cannot access\n"
+    
+    result += list_files('.')
+    result += "</pre>"
+    return result
+
 # تشغيل الخادم
 if __name__ == '__main__':
     print("\n" + "="*60)
     print("🚀 MathCore Server v3.3 Starting...")
     print("="*60)
     print(f"📁 المجلد الحالي: {os.getcwd()}")
-    print(f"📁 مجلد الواجهة: templates")
+    print(f"📁 مجلد الواجهة: templates (خارج backend)")
     print(f"📄 ملف الرياضيات: mathcore.py (v3.3)")
     print(f"⚙️  Timeout config: {math_core.timeout_config}")
     print(f"🖥️  CPU cores: {math_core.cpu_count}")
