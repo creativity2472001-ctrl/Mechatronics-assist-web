@@ -14,10 +14,10 @@ logger = logging.getLogger(__name__)
 # استيراد MathCore من نفس المجلد
 from mathcore import MathCore
 
-# إنشاء تطبيق Flask
+# إنشاء تطبيق Flask - المسارات المعدلة ✅
 app = Flask(__name__, 
-            static_folder='../templates',
-            template_folder='../templates')
+            static_folder='templates',      # ✅ تم التعديل
+            template_folder='templates')     # ✅ تم التعديل
 CORS(app)  # للسماح بالتواصل مع الواجهة
 
 # إنشاء كائن MathCore (نسخة v3.3)
@@ -26,7 +26,8 @@ math_core = MathCore()
 @app.route('/')
 def index():
     """عرض الصفحة الرئيسية"""
-    return send_from_directory(app.template_folder, 'index.html')
+    # ✅ تم التعديل - مسار مباشر
+    return send_from_directory('templates', 'index.html')
 
 @app.route('/api/solve', methods=['POST'])
 def solve():
@@ -36,7 +37,7 @@ def solve():
         data = request.json
         question = data.get('question', '').strip()
         language = data.get('language', 'ar')
-        user_id = data.get('user_id', 'default')  # لـ rate limiting
+        user_id = data.get('user_id', 'default')
         
         logger.info(f"📩 سؤال جديد: {question[:50]}...")
         
@@ -51,12 +52,12 @@ def solve():
                 'confidence': 0
             })
         
-        # حل المسألة باستخدام mathcore.py (v3.3)
+        # حل المسألة باستخدام mathcore.py
         result = math_core.solve(
             question=question,
             language=language,
             user_id=user_id,
-            timeout=None  # سيتم تقدير الوقت تلقائياً
+            timeout=None
         )
         
         logger.info(f"✅ تم الحل: {result.get('simple_answer', '')[:50]}...")
@@ -87,7 +88,7 @@ def health():
 
 @app.route('/api/stats', methods=['GET'])
 def stats():
-    """إحصائيات عن الخادم (اختياري)"""
+    """إحصائيات عن الخادم"""
     return jsonify({
         'cpu_cores': math_core.cpu_count,
         'thread_pool': math_core.thread_pool._max_workers,
@@ -101,11 +102,12 @@ if __name__ == '__main__':
     print("🚀 MathCore Server v3.3 Starting...")
     print("="*60)
     print(f"📁 المجلد الحالي: {os.getcwd()}")
-    print(f"📁 مجلد الواجهة: {app.template_folder}")
+    print(f"📁 مجلد الواجهة: templates")
     print(f"📄 ملف الرياضيات: mathcore.py (v3.3)")
     print(f"⚙️  Timeout config: {math_core.timeout_config}")
     print(f"🖥️  CPU cores: {math_core.cpu_count}")
     print("\n🌐 رابط الواجهة: http://localhost:5000")
     print("="*60 + "\n")
     
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
