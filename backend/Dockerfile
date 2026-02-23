@@ -13,9 +13,11 @@ COPY backend/ .
 # نسخ مجلد templates إلى المسار الصحيح
 COPY templates/ ./templates/
 
-# تحقق من الملفات (للتأكيد)
-RUN ls -la && ls -la templates/
+# تشخيص الملفات (للتأكد)
+RUN echo "=== ملفات /app ===" && ls -la
+RUN echo "=== ملفات templates ===" && ls -la templates/
 
 EXPOSE 5000
 
-CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:5000", "--log-level", "debug"]
+# تشغيل Gunicorn مع إعدادات Railway
+CMD gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120 --workers 1 --log-level debug
