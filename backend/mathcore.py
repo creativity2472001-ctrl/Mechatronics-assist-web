@@ -1009,3 +1009,4 @@ if __name__ == "__main__":
     print("\n" + "=" * 90)
     print("✅ MathCore v3.4 جاهز للإنتاج!")
     print("=" * 90)
+
