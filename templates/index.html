@@ -3,391 +3,235 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MathCore - AI Engineering Assistant</title>
+    <title>MathCore · AI Engineering Assistant</title>
     <style>
         * {
+            box-sizing: border-box;
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
-            font-family: 'Segoe UI', Arial, sans-serif;
+            font-family: 'Segoe UI', system-ui, sans-serif;
         }
-
         body {
+            background: #f0f4fa;
             height: 100vh;
             display: flex;
             flex-direction: column;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
-
-        /* Header */
         #header {
-            background: rgba(255, 255, 255, 0.95);
-            color: #333;
-            padding: 15px 30px;
+            background: linear-gradient(145deg, #1b3b6f, #2a5599);
+            color: white;
+            padding: 16px 24px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            flex-wrap: wrap;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         }
-
         .logo {
-            font-size: 24px;
-            font-weight: bold;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            font-size: 26px;
+            font-weight: 700;
+            letter-spacing: 1px;
         }
-
         .logo span {
             font-size: 14px;
+            opacity: 0.9;
             display: block;
-            color: #666;
-            -webkit-text-fill-color: #666;
+            font-weight: 400;
         }
-
-        .language-switch {
+        .lang-switch {
             display: flex;
-            gap: 10px;
+            gap: 12px;
         }
-
         .lang-btn {
-            padding: 8px 16px;
-            border: 2px solid #667eea;
-            background: transparent;
-            color: #667eea;
-            border-radius: 25px;
+            background: rgba(255,255,255,0.15);
+            border: 2px solid transparent;
+            color: white;
+            padding: 8px 20px;
+            border-radius: 40px;
+            font-weight: 600;
             cursor: pointer;
-            font-weight: bold;
-            transition: all 0.3s;
+            font-size: 16px;
+            transition: 0.25s;
         }
-
         .lang-btn.active {
-            background: #667eea;
-            color: white;
+            background: white;
+            color: #1b3b6f;
+            border-color: white;
         }
-
-        .lang-btn:hover {
-            background: #667eea;
-            color: white;
-        }
-
-        /* Main Container */
         #chat-container {
             display: flex;
             flex: 1;
-            overflow: hidden;
             padding: 20px;
             gap: 20px;
+            overflow: hidden;
         }
-
-        /* Input Section */
         #input-section {
             width: 40%;
             background: white;
-            border-radius: 20px;
-            padding: 20px;
+            border-radius: 28px;
+            padding: 22px;
+            box-shadow: 0 8px 26px rgba(0,0,0,0.08);
             display: flex;
             flex-direction: column;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
         }
-
-        .section-title {
-            color: #667eea;
-            margin-bottom: 15px;
-            font-size: 18px;
-            font-weight: bold;
-        }
-
         #question {
             flex: 1;
             resize: none;
-            font-size: 16px;
-            padding: 15px;
-            border-radius: 10px;
-            border: 2px solid #e0e0e0;
-            margin-bottom: 15px;
+            font-size: 18px;
+            padding: 18px;
+            border-radius: 20px;
+            border: 2px solid #dde3ed;
+            margin-bottom: 18px;
             font-family: 'Courier New', monospace;
-            transition: border 0.3s;
+            min-height: 140px;
+            transition: 0.2s;
         }
-
         #question:focus {
+            border-color: #1b3b6f;
             outline: none;
-            border-color: #667eea;
         }
-
         #keyboard-toggle {
-            padding: 12px;
-            margin-bottom: 15px;
-            cursor: pointer;
-            border: 2px solid #e0e0e0;
-            border-radius: 10px;
-            background: #f8f9fa;
+            background: #eef3fc;
+            padding: 16px;
+            border-radius: 18px;
+            font-size: 18px;
+            font-weight: 600;
+            color: #1b3b6f;
             text-align: center;
-            font-weight: bold;
-            color: #667eea;
-            transition: all 0.3s;
+            cursor: pointer;
+            margin-bottom: 18px;
+            border: 1px solid transparent;
+            transition: 0.2s;
         }
-
         #keyboard-toggle:hover {
-            background: #667eea;
-            color: white;
-            border-color: #667eea;
+            background: #d9e4f5;
         }
-
         #math-keyboard {
             display: none;
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 15px;
-            max-height: 250px;
+            background: #f8fafd;
+            border-radius: 24px;
+            padding: 18px 12px;
+            margin-bottom: 18px;
+            max-height: 260px;
             overflow-y: auto;
+            border: 1px solid #cbd5e1;
         }
-
-        .keyboard-category {
-            color: #667eea;
-            font-weight: bold;
-            margin: 10px 0 5px;
-            font-size: 14px;
-        }
-
         .keyboard-row {
             display: flex;
             flex-wrap: wrap;
-            gap: 5px;
-            margin-bottom: 10px;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 12px;
         }
-
         .keyboard-row button {
-            flex: 1 0 auto;
-            min-width: 45px;
-            padding: 10px;
-            font-size: 16px;
-            cursor: pointer;
-            border-radius: 8px;
-            border: 1px solid #ddd;
+            flex: 0 0 auto;
+            min-width: 65px;
+            padding: 16px 8px;
+            font-size: 24px;
+            font-weight: 600;
             background: white;
-            transition: all 0.2s;
-            font-weight: bold;
-        }
-
-        .keyboard-row button:hover {
-            background: #667eea;
-            color: white;
-            transform: scale(1.05);
-            border-color: #667eea;
-        }
-
-        #solve-btn {
-            padding: 15px;
-            font-size: 18px;
-            border: none;
-            border-radius: 10px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
+            border: 1px solid #bdc9db;
+            border-radius: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.02);
             cursor: pointer;
-            font-weight: bold;
-            transition: all 0.3s;
-            margin-top: 10px;
+            transition: 0.15s;
+            color: #0b2b4a;
         }
-
+        .keyboard-row button:hover {
+            background: #1b3b6f;
+            color: white;
+            border-color: #1b3b6f;
+            transform: scale(1.02);
+        }
+        #solve-btn {
+            background: linear-gradient(145deg, #1b3b6f, #2a4f8c);
+            border: none;
+            color: white;
+            font-size: 22px;
+            font-weight: 700;
+            padding: 18px;
+            border-radius: 40px;
+            cursor: pointer;
+            margin-top: 8px;
+            transition: 0.2s;
+            box-shadow: 0 6px 14px rgba(26, 59, 111, 0.3);
+        }
         #solve-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+            background: #15315c;
+            transform: scale(1.01);
         }
-
-        /* Answer Section */
         #answer-section {
             flex: 1;
             background: white;
-            border-radius: 20px;
-            padding: 20px;
+            border-radius: 28px;
+            padding: 26px;
+            box-shadow: 0 8px 26px rgba(0,0,0,0.08);
             overflow-y: auto;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
         }
-
-        /* Processing Info */
-        #processing-info {
-            background: linear-gradient(135deg, #e3f2fd, #bbdefb);
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            border-right: 4px solid #2196F3;
-            font-size: 14px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .confidence-badge {
-            background: #2196F3;
-            color: white;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: bold;
-        }
-
-        /* View Toggle */
-        .view-toggle {
-            text-align: left;
-            margin-bottom: 15px;
-        }
-
-        .toggle-btn {
-            padding: 8px 16px;
-            border: 2px solid #667eea;
-            background: transparent;
-            color: #667eea;
-            border-radius: 25px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: all 0.3s;
-        }
-
-        .toggle-btn:hover {
-            background: #667eea;
-            color: white;
-        }
-
-        /* Simple View */
-        .solution-card {
-            background: linear-gradient(135deg, #f5f7fa, #f8f9fa);
-            border-radius: 15px;
-            padding: 30px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        .domain-badge {
+            background: #e5eefc;
+            padding: 14px 18px;
+            border-radius: 60px;
+            margin-bottom: 24px;
             text-align: center;
-            margin-bottom: 20px;
+            font-size: 17px;
+            font-weight: 500;
+            border: 1px solid #1b3b6f30;
+            color: #1b3b6f;
         }
-
-        .solution-card h3 {
-            color: #667eea;
-            margin-bottom: 20px;
-            font-size: 20px;
+        .solution-card {
+            background: #f7faff;
+            border-radius: 36px;
+            padding: 30px 20px;
+            text-align: center;
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.02);
         }
-
         #simplified-solution {
-            font-size: 36px;
-            font-weight: bold;
-            color: #4CAF50;
+            font-size: 44px;
+            font-weight: 800;
+            color: #0f2b50;
+            background: white;
+            padding: 28px 20px;
+            border-radius: 40px;
             margin: 20px 0;
-            font-family: 'Courier New', monospace;
-            padding: 20px;
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            border: 1px solid #d0def0;
+            word-break: break-word;
         }
-
-        .solution-note {
-            color: #666;
-            font-size: 14px;
-            margin-top: 15px;
+        .note {
+            color: #4a5f7a;
+            font-size: 16px;
         }
-
-        /* Advanced View */
-        .advanced-section {
-            margin-bottom: 20px;
-        }
-
-        .section-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 15px;
-            background: #f8f9fa;
-            border-radius: 10px 10px 0 0;
-            font-weight: bold;
-            border: 1px solid #e0e0e0;
-            border-bottom: none;
-        }
-
-        .badge-code {
-            background: #4CAF50;
-            color: white;
-            padding: 3px 10px;
-            border-radius: 15px;
-            font-size: 12px;
-        }
-
-        .badge-ai {
-            background: #FF9800;
-            color: white;
-            padding: 3px 10px;
-            border-radius: 15px;
-            font-size: 12px;
-        }
-
-        .solution-content, .ai-content {
-            padding: 20px;
-            background: white;
-            border: 1px solid #e0e0e0;
-            border-radius: 0 0 10px 10px;
-            line-height: 1.8;
-        }
-
-        .step-item {
-            margin-bottom: 15px;
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            border-right: 3px solid #667eea;
-        }
-
-        /* Chat Messages */
-        #chat-messages {
-            margin-top: 20px;
-        }
-
         .message {
-            margin-bottom: 10px;
-            padding: 12px 15px;
-            border-radius: 10px;
-            max-width: 90%;
+            padding: 14px 20px;
+            border-radius: 30px;
+            margin-bottom: 12px;
+            max-width: 85%;
             word-wrap: break-word;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            background: #eef3fc;
         }
-
         .user-message {
-            background: linear-gradient(135deg, #667eea, #764ba2);
+            background: #1b3b6f;
             color: white;
             margin-left: auto;
         }
-
-        .bot-message {
-            background: #f8f9fa;
-            border: 1px solid #e0e0e0;
-        }
-
-        .loading {
-            text-align: center;
-            padding: 30px;
-            color: #666;
-        }
-
-        .loading::after {
-            content: '...';
-            animation: dots 1.5s steps(5, end) infinite;
-        }
-
-        @keyframes dots {
-            0%, 20% { content: '.'; }
-            40% { content: '..'; }
-            60%, 100% { content: '...'; }
-        }
-
-        /* RTL/LTR Support */
-        [dir="rtl"] .view-toggle {
-            text-align: right;
-        }
-
-        [dir="rtl"] .step-item {
-            border-right: none;
-            border-left: 3px solid #667eea;
-        }
-
-        [dir="rtl"] .user-message {
-            margin-left: 0;
-            margin-right: auto;
+        @media (max-width: 768px) {
+            #chat-container {
+                flex-direction: column;
+                padding: 12px;
+            }
+            #input-section, #answer-section {
+                width: 100%;
+                padding: 18px;
+            }
+            .keyboard-row button {
+                min-width: 55px;
+                font-size: 20px;
+                padding: 14px 5px;
+            }
+            #simplified-solution {
+                font-size: 34px;
+                padding: 20px;
+            }
         }
     </style>
 </head>
@@ -395,30 +239,19 @@
     <div id="header">
         <div class="logo">
             MathCore
-            <span>AI Engineering Assistant</span>
+            <span data-ar="المساعد الهندسي الذكي" data-en="AI Engineering Assistant">المساعد الهندسي الذكي</span>
         </div>
-        <div class="language-switch">
-            <button class="lang-btn active" onclick="switchLanguage('ar')" id="lang-ar">العربية</button>
-            <button class="lang-btn" onclick="switchLanguage('en')" id="lang-en">English</button>
+        <div class="lang-switch">
+            <button class="lang-btn active" onclick="switchLang('ar')" id="btn-ar">🇸🇦 العربية</button>
+            <button class="lang-btn" onclick="switchLang('en')" id="btn-en">🇬🇧 English</button>
         </div>
     </div>
 
     <div id="chat-container">
-        <!-- Input Section -->
         <div id="input-section">
-            <div class="section-title" data-ar="📝 أدخل سؤالك" data-en="📝 Enter your question">
-                📝 أدخل سؤالك
-            </div>
             <textarea id="question" placeholder="اكتب سؤالك هنا..."></textarea>
-            
-            <div id="keyboard-toggle" onclick="toggleKeyboard()">
-                ⌨️ إظهار لوحة الرموز
-            </div>
-            
+            <div id="keyboard-toggle" onclick="toggleKeyboard()">⌨️ إظهار لوحة الرموز</div>
             <div id="math-keyboard">
-                <div class="keyboard-category" data-ar="➕ العمليات الأساسية" data-en="➕ Basic Operations">
-                    ➕ العمليات الأساسية
-                </div>
                 <div class="keyboard-row">
                     <button onclick="insertSymbol('+')">+</button>
                     <button onclick="insertSymbol('-')">-</button>
@@ -428,291 +261,104 @@
                     <button onclick="insertSymbol('^')">^</button>
                     <button onclick="insertSymbol('√')">√</button>
                 </div>
-                
-                <div class="keyboard-category" data-ar="📐 رموز رياضية" data-en="📐 Math Symbols">
-                    📐 رموز رياضية
-                </div>
                 <div class="keyboard-row">
                     <button onclick="insertSymbol('π')">π</button>
                     <button onclick="insertSymbol('∞')">∞</button>
                     <button onclick="insertSymbol('Σ')">Σ</button>
                     <button onclick="insertSymbol('∫')">∫</button>
-                    <button onclick="insertSymbol('∂')">∂</button>
-                    <button onclick="insertSymbol('∇')">∇</button>
-                </div>
-                
-                <div class="keyboard-category" data-ar="⚡ فيزياء وكهرباء" data-en="⚡ Physics & Electrical">
-                    ⚡ فيزياء وكهرباء
+                    <button onclick="insertSymbol('θ')">θ</button>
+                    <button onclick="insertSymbol('λ')">λ</button>
                 </div>
                 <div class="keyboard-row">
-                    <button onclick="insertSymbol('Ω')">Ω</button>
-                    <button onclick="insertSymbol('µ')">µ</button>
-                    <button onclick="insertSymbol('∠')">∠</button>
-                    <button onclick="insertSymbol('°')">°</button>
                     <button onclick="insertSymbol('α')">α</button>
                     <button onclick="insertSymbol('β')">β</button>
                     <button onclick="insertSymbol('γ')">γ</button>
-                    <button onclick="insertSymbol('θ')">θ</button>
-                </div>
-                
-                <div class="keyboard-category" data-ar="🔧 رموز ميكانيك" data-en="🔧 Mechanical Symbols">
-                    🔧 رموز ميكانيك
-                </div>
-                <div class="keyboard-row">
-                    <button onclick="insertSymbol('σ')">σ</button>
-                    <button onclick="insertSymbol('τ')">τ</button>
-                    <button onclick="insertSymbol('ε')">ε</button>
-                    <button onclick="insertSymbol('ρ')">ρ</button>
-                    <button onclick="insertSymbol('ν')">ν</button>
+                    <button onclick="insertSymbol('Ω')">Ω</button>
+                    <button onclick="insertSymbol('μ')">μ</button>
+                    <button onclick="insertSymbol('°')">°</button>
                 </div>
             </div>
-            
-            <button id="solve-btn" onclick="sendQuestion()">
-                🔍 حل المسألة
-            </button>
+            <button id="solve-btn" onclick="sendQuestion()">🔍 حل المسألة</button>
         </div>
-
-        <!-- Answer Section -->
         <div id="answer-section">
-            <!-- Processing Info (يظهر بعد الحل) -->
-            <div id="processing-info" style="display: none;">
-                <span id="detection-text">🧠 تم تحليل سؤالك كـ <strong>مسألة رياضية</strong></span>
-                <span class="confidence-badge" id="confidence-text">98% دقة</span>
+            <div class="domain-badge" id="domain-badge">
+                <span data-ar="🧠 تم تحليل سؤالك كـ" data-en="🧠 Detected as">🧠 تم تحليل سؤالك كـ</span>
+                <strong id="domain-name">رياضيات</strong>
+                <span id="confidence-value"> · 98%</span>
             </div>
-
-            <!-- View Toggle -->
-            <div class="view-toggle">
-                <button class="toggle-btn" onclick="toggleViewMode()" id="view-toggle-btn">
-                    👁️ عرض تفصيلي
-                </button>
+            <div class="solution-card">
+                <div style="font-size: 22px; color: #1b3b6f; margin-bottom: 6px;" data-ar="📋 الحل" data-en="📋 Solution">📋 الحل</div>
+                <div id="simplified-solution" data-ar="اكتب سؤالك لتبدأ" data-en="Enter your question">اكتب سؤالك لتبدأ</div>
+                <div class="note" data-ar="✨ سيتم حل المسألة بدقة عالية" data-en="✨ High‑accuracy solution">✨ سيتم حل المسألة بدقة عالية</div>
             </div>
-
-            <!-- Simple View (الافتراضي) -->
-            <div id="simple-view">
-                <div class="solution-card">
-                    <h3 data-ar="📋 الحل" data-en="📋 Solution">📋 الحل</h3>
-                    <div id="simplified-solution">
-                        <span data-ar="اكتب سؤالك لتبدأ" data-en="Enter your question to start">
-                            اكتب سؤالك لتبدأ
-                        </span>
-                    </div>
-                    <p class="solution-note" data-ar="✨ سيتم حل المسألة بدقة عالية" data-en="✨ Your problem will be solved with high accuracy">
-                        ✨ سيتم حل المسألة بدقة عالية
-                    </p>
-                </div>
-            </div>
-
-            <!-- Advanced View (يظهر عند الضغط على الزر) -->
-            <div id="advanced-view" style="display: none;">
-                <div class="advanced-section">
-                    <div class="section-header">
-                        <span data-ar="📊 خطوات الحل (من الكود)" data-en="📊 Solution Steps (Code)">📊 خطوات الحل (من الكود)</span>
-                        <span class="badge-code">99% دقة</span>
-                    </div>
-                    <div id="solution-steps" class="solution-content">
-                        <div class="step-item">الخطوة 1: ...</div>
-                        <div class="step-item">الخطوة 2: ...</div>
-                    </div>
-                </div>
-                
-                <div class="advanced-section">
-                    <div class="section-header">
-                        <span data-ar="🤖 شرح الذكاء الاصطناعي" data-en="🤖 AI Explanation">🤖 شرح الذكاء الاصطناعي</span>
-                        <span class="badge-ai">شرح مبسط</span>
-                    </div>
-                    <div id="ai-explanation" class="ai-content">
-                        هنا سيظهر شرح مفصل للمسألة
-                    </div>
-                </div>
-            </div>
-
-            <!-- Chat Messages -->
-            <div id="chat-messages"></div>
         </div>
     </div>
 
     <script>
-        // ========== إدارة اللغة ==========
         let currentLang = 'ar';
-        
-        function switchLanguage(lang) {
+
+        function switchLang(lang) {
             currentLang = lang;
-            
-            // تحديث أزرار اللغة
-            document.getElementById('lang-ar').classList.remove('active');
-            document.getElementById('lang-en').classList.remove('active');
-            document.getElementById(`lang-${lang}`).classList.add('active');
-            
-            // تحديث اتجاه الصفحة
-            document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
-            document.documentElement.lang = lang;
-            
-            // تحديث النصوص
-            updateTexts();
-        }
-        
-        function updateTexts() {
-            // تحديث كل العناصر التي لديها data-ar و data-en
-            document.querySelectorAll('[data-ar][data-en]').forEach(element => {
-                element.textContent = element.getAttribute(`data-${currentLang}`);
+            document.getElementById('btn-ar').classList.toggle('active', lang === 'ar');
+            document.getElementById('btn-en').classList.toggle('active', lang === 'en');
+
+            document.querySelectorAll('[data-ar][data-en]').forEach(el => {
+                el.innerText = el.getAttribute(`data-${lang}`);
             });
-            
-            // تحديث الـ placeholders
-            const questionInput = document.getElementById('question');
-            if (currentLang === 'ar') {
-                questionInput.placeholder = 'اكتب سؤالك هنا...';
-            } else {
-                questionInput.placeholder = 'Enter your question here...';
-            }
-            
-            // تحديث نص زر لوحة المفاتيح
-            const keyboardToggle = document.getElementById('keyboard-toggle');
-            if (currentLang === 'ar') {
-                keyboardToggle.innerHTML = '⌨️ إظهار لوحة الرموز';
-            } else {
-                keyboardToggle.innerHTML = '⌨️ Show Keyboard';
-            }
-            
-            // تحديث نص زر الحل
+
+            const q = document.getElementById('question');
+            q.placeholder = lang === 'ar' ? 'اكتب سؤالك هنا...' : 'Type your question here...';
+
+            const toggle = document.getElementById('keyboard-toggle');
+            toggle.innerText = lang === 'ar' ? '⌨️ إظهار لوحة الرموز' : '⌨️ Show keyboard';
+
             const solveBtn = document.getElementById('solve-btn');
-            if (currentLang === 'ar') {
-                solveBtn.innerHTML = '🔍 حل المسألة';
-            } else {
-                solveBtn.innerHTML = '🔍 Solve';
-            }
+            solveBtn.innerText = lang === 'ar' ? '🔍 حل المسألة' : '🔍 Solve';
+
+            document.documentElement.lang = lang;
+            document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
         }
 
-        // ========== لوحة المفاتيح ==========
         function toggleKeyboard() {
             const kb = document.getElementById('math-keyboard');
-            if (kb.style.display === 'flex' || kb.style.display === 'block') {
-                kb.style.display = 'none';
-                document.getElementById('keyboard-toggle').innerHTML = 
-                    currentLang === 'ar' ? '⌨️ إظهار لوحة الرموز' : '⌨️ Show Keyboard';
-            } else {
-                kb.style.display = 'block';
-                document.getElementById('keyboard-toggle').innerHTML = 
-                    currentLang === 'ar' ? '⌨️ إخفاء لوحة الرموز' : '⌨️ Hide Keyboard';
-            }
+            kb.style.display = kb.style.display === 'flex' ? 'none' : 'flex';
         }
 
         function insertSymbol(sym) {
-            const textarea = document.getElementById('question');
-            const start = textarea.selectionStart;
-            const end = textarea.selectionEnd;
-            const text = textarea.value;
-            textarea.value = text.slice(0, start) + sym + text.slice(end);
-            textarea.selectionStart = textarea.selectionEnd = start + sym.length;
-            textarea.focus();
+            const q = document.getElementById('question');
+            const start = q.selectionStart;
+            const end = q.selectionEnd;
+            q.value = q.value.slice(0, start) + sym + q.value.slice(end);
+            q.focus();
         }
 
-        // ========== إدارة العرض (Simple/Advanced) ==========
-        let viewMode = 'simple';
-
-        function toggleViewMode() {
-            const simpleView = document.getElementById('simple-view');
-            const advancedView = document.getElementById('advanced-view');
-            const toggleBtn = document.getElementById('view-toggle-btn');
-            
-            if (viewMode === 'simple') {
-                simpleView.style.display = 'none';
-                advancedView.style.display = 'block';
-                toggleBtn.innerHTML = currentLang === 'ar' ? '🔍 عرض مبسط' : '🔍 Simple View';
-                viewMode = 'advanced';
-            } else {
-                simpleView.style.display = 'block';
-                advancedView.style.display = 'none';
-                toggleBtn.innerHTML = currentLang === 'ar' ? '👁️ عرض تفصيلي' : '👁️ Detailed View';
-                viewMode = 'simple';
-            }
-        }
-
-        // ========== إرسال السؤال ==========
         function sendQuestion() {
-            const question = document.getElementById('question').value.trim();
-            
-            if (!question) {
-                alert(currentLang === 'ar' ? 'الرجاء إدخال السؤال!' : 'Please enter your question!');
+            const q = document.getElementById('question').value.trim();
+            if (!q) {
+                alert(currentLang === 'ar' ? 'الرجاء إدخال سؤال' : 'Please enter a question');
                 return;
             }
-            
-            // عرض سؤال المستخدم
-            appendMessage(question, 'user');
-            
-            // إظهار مؤشر التحميل
-            showLoading();
-            
-            // محاكاة استجابة من الخادم (للاختبار)
-            setTimeout(() => {
-                hideLoading();
-                
-                // بيانات تجريبية
-                const mockData = {
-                    domain: 'mathematics',
-                    confidence: 98,
-                    simple_answer: 'x = 2, x = 3',
-                    steps: [
-                        'نكتب المعادلة: x² - 5x + 6 = 0',
-                        'نحلل المعادلة: (x - 2)(x - 3) = 0',
-                        'إما x - 2 = 0 ⇒ x = 2',
-                        'أو x - 3 = 0 ⇒ x = 3'
-                    ],
-                    ai_explanation: 'هذه معادلة تربيعية بسيطة. الحلول هي x=2 و x=3. يمكن التحقق بالتعويض.'
-                };
-                
-                displayResults(mockData);
-            }, 1500);
+
+            const solutionDiv = document.getElementById('simplified-solution');
+            solutionDiv.innerText = currentLang === 'ar' ? '⏳ جاري الحل...' : '⏳ Solving...';
+
+            fetch('/api/solve', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question: q, language: currentLang })
+            })
+            .then(r => r.json())
+            .then(data => {
+                solutionDiv.innerText = data.simple_answer || (currentLang === 'ar' ? 'تم الحل' : 'Solved');
+                if (data.domain) document.getElementById('domain-name').innerText = data.domain;
+                if (data.confidence) document.getElementById('confidence-value').innerText = ` · ${data.confidence}%`;
+            })
+            .catch(() => {
+                solutionDiv.innerText = currentLang === 'ar' ? '❌ خطأ في الاتصال' : '❌ Connection error';
+            });
         }
 
-        function displayResults(data) {
-            // إظهار معلومات التحليل
-            document.getElementById('processing-info').style.display = 'flex';
-            
-            const domainNames = {
-                'mathematics': { ar: 'رياضية', en: 'mathematics' },
-                'physics': { ar: 'فيزيائية', en: 'physics' },
-                'electrical': { ar: 'كهربائية', en: 'electrical' }
-            };
-            
-            document.getElementById('detection-text').innerHTML = 
-                `🧠 ${currentLang === 'ar' ? 'تم تحليل سؤالك كـ' : 'Detected as'} <strong>${domainNames[data.domain]?.[currentLang] || data.domain}</strong> ${currentLang === 'ar' ? 'مسألة' : 'problem'}`;
-            
-            document.getElementById('confidence-text').textContent = 
-                `${currentLang === 'ar' ? data.confidence + '% دقة' : data.confidence + '% confidence'}`;
-            
-            // تحديث العرض المبسط
-            document.getElementById('simplified-solution').innerHTML = data.simple_answer;
-            
-            // تحديث العرض المتقدم
-            const stepsHtml = data.steps.map((step, i) => 
-                `<div class="step-item">${currentLang === 'ar' ? 'الخطوة ' + (i+1) : 'Step ' + (i+1)}: ${step}</div>`
-            ).join('');
-            document.getElementById('solution-steps').innerHTML = stepsHtml;
-            
-            document.getElementById('ai-explanation').innerHTML = data.ai_explanation;
-        }
-
-        function showLoading() {
-            document.getElementById('simplified-solution').innerHTML = 
-                '<div class="loading">جاري الحل</div>';
-            document.getElementById('solution-steps').innerHTML = 
-                '<div class="loading">جاري الحل...</div>';
-            document.getElementById('ai-explanation').innerHTML = 
-                '<div class="loading">جاري تحضير الشرح...</div>';
-        }
-
-        function hideLoading() {
-            // ستستبدل بالمحتوى الحقيقي في displayResults
-        }
-
-        function appendMessage(text, sender) {
-            const messages = document.getElementById('chat-messages');
-            const msgDiv = document.createElement('div');
-            msgDiv.className = `message ${sender}-message`;
-            msgDiv.textContent = text;
-            messages.appendChild(msgDiv);
-            messages.scrollTop = messages.scrollHeight;
-        }
+        switchLang('ar');
     </script>
 </body>
 </html>
