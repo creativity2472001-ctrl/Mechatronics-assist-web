@@ -16,12 +16,41 @@ class MathCore:
             if result:
                 return self._success(result)
         
-        # 2. المعادلات (سنضيفها لاحقًا)
-        # 3. التفاضل (سنضيفه لاحقًا)
-        # 4. التكامل (سنضيفه لاحقًا)
-        # 5. النهايات (سنضيفها لاحقًا)
-        # 6. التبسيط (سنضيفه لاحقًا)
-        # 7. التحليل (سنضيفه لاحقًا)
+        # 2. المعادلات
+        if equations.is_equation(question):
+            result = equations.solve(question)
+            if result:
+                return self._success(result)
+        
+        # 3. التفاضل
+        if derivatives.is_derivative(question):
+            result = derivatives.solve(question)
+            if result:
+                return self._success(result)
+        
+        # 4. التكامل
+        if integrals.is_integral(question):
+            result = integrals.solve(question)
+            if result:
+                return self._success(result)
+        
+        # 5. النهايات
+        if limits.is_limit(question):
+            result = limits.solve(question)
+            if result:
+                return self._success(result)
+        
+        # 6. التبسيط
+        if simplify.is_simplify(question):
+            result = simplify.solve(question)
+            if result:
+                return self._success(result)
+        
+        # 7. التحليل
+        if factor.is_factor(question):
+            result = factor.solve(question)
+            if result:
+                return self._success(result)
         
         return self._error('لم أتمكن من حل المسألة')
     
