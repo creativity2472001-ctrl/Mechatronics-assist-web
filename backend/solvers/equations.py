@@ -2,7 +2,7 @@
 حل المعادلات الجبرية - نسخة مستقلة
 """
 import re
-from sympy import symbols, Eq, solve, parse_expr
+from sympy import symbols, Eq, solve
 from sympy.parsing.sympy_parser import (
     parse_expr,
     standard_transformations,
@@ -21,16 +21,33 @@ transformations = (
 
 def normalize(question: str) -> str:
     expr = question.lower().strip()
-    replacements = {'×': '*', '÷': '/', '^': '**', '√': 'sqrt', 'π': 'pi', '∞': 'oo'}
+    replacements = {
+        '×': '*',
+        '÷': '/',
+        '^': '**',
+        '√': 'sqrt',
+        'π': 'pi',
+        '∞': 'oo',
+        '²': '**2',
+        '³': '**3'
+    }
     for old, new in replacements.items():
         expr = expr.replace(old, new)
+    
+    # 2x → 2*x
     expr = re.sub(r'(\d)([a-zA-Z])', r'\1*\2', expr)
+    # x2 → x**2
     expr = re.sub(r'([a-zA-Z])(\d)', r'\1**\2', expr)
+    
     return expr
 
 def parse_expression(expr_str: str):
     try:
-        return parse_expr(expr_str, transformations=transformations, evaluate=True)
+        return parse_expr(
+            expr_str,
+            transformations=transformations,
+            evaluate=True
+        )
     except:
         return None
 
