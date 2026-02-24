@@ -2,7 +2,7 @@
 حل العمليات الحسابية البسيطة
 مثل: 1+1, 2*3, (5+3)/2
 """
-from normalizer import normalize, parse_expression
+from .normalizer import normalize, parse_expression
 
 def is_arithmetic(question):
     """تحديد إذا كان السؤال عملية حسابية"""
