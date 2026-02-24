@@ -3,8 +3,8 @@
 مثل: integral of x**2, ∫ x dx
 """
 import re
-from normalizer import normalize, parse_expression
-from sympy import integrate, symbols
+from sympy import symbols, integrate
+from .normalizer import normalize, parse_expression
 
 x = symbols('x')
 
@@ -19,7 +19,7 @@ def solve(question):
     try:
         q = normalize(question)
         
-        # استخراج الحدود (تدعم الكسور والأعداد السالبة)
+        # استخراج الحدود
         numbers = re.findall(r'-?\d+\.?\d*', q)
         has_limits = 'from' in q or 'to' in q or 'من' in q or 'إلى' in q
         
