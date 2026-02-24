@@ -2,7 +2,7 @@
 حل المعادلات الجبرية
 مثل: x+5=10, 2x-4=8, x²-5x+6=0
 """
-from normalizer import normalize, parse_equation
+from .normalizer import normalize, parse_equation
 from sympy import solve
 
 def is_equation(question):
