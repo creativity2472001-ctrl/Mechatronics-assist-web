@@ -4,7 +4,7 @@
 """
 import re
 from sympy import symbols, diff
-from normalizer import normalize, parse_expression
+from .normalizer import normalize, parse_expression
 
 x = symbols('x')
 
