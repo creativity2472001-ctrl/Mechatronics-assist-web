@@ -8,17 +8,17 @@ logger = logging.getLogger(__name__)
 
 from mathcore import MathCore
 
-# ✅ المسار الصحيح (خارج مجلد backend)
+# ✅ المسار الصحيح (templates داخل backend)
 app = Flask(__name__, 
-            static_folder='../templates',
-            template_folder='../templates')
+            static_folder='templates',
+            template_folder='templates')
 
 CORS(app)
 math_core = MathCore()
 
 @app.route('/')
 def index():
-    return send_from_directory('../templates', 'index.html')
+    return send_from_directory('templates', 'index.html')
 
 @app.route('/api/solve', methods=['POST'])
 def solve():
