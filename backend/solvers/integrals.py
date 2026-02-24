@@ -3,7 +3,8 @@
 مثل: integral of x**2, ∫ x dx
 """
 import re
-from sympy import symbols, integrate, sympify
+from normalizer import normalize, parse_expression
+from sympy import integrate, symbols
 
 x = symbols('x')
 
@@ -16,20 +17,26 @@ def is_integral(question):
 def solve(question):
     """حساب التكامل"""
     try:
-        # استخراج الدالة
-        expr = question.lower()
-        for word in ['integral', '∫', 'تكامل', 'of', 'لـ']:
-            expr = expr.replace(word, '')
+        q = normalize(question)
         
-        expr = sympify(expr.strip())
+        # استخراج الحدود (تدعم الكسور والأعداد السالبة)
+        numbers = re.findall(r'-?\d+\.?\d*', q)
+        has_limits = 'from' in q or 'to' in q or 'من' in q or 'إلى' in q
         
-        # تكامل محدد؟
-        if 'from' in question or 'to' in question:
-            numbers = re.findall(r'\d+', question)
-            if len(numbers) >= 2:
-                lower, upper = float(numbers[0]), float(numbers[1])
-                result = integrate(expr, (x, lower, upper))
-                return str(result)
+        # إزالة الكلمات المفتاحية
+        expr_str = q
+        for word in ['integral', '∫', 'تكامل', 'of', 'لـ', 'from', 'to', 'من', 'إلى']:
+            expr_str = expr_str.replace(word, '')
+        
+        expr = parse_expression(expr_str.strip())
+        if expr is None:
+            return None
+        
+        # تكامل محدد
+        if has_limits and len(numbers) >= 2:
+            lower, upper = float(numbers[0]), float(numbers[1])
+            result = integrate(expr, (x, lower, upper))
+            return str(result)
         
         # تكامل غير محدد
         result = integrate(expr, x)
