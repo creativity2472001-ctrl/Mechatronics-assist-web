@@ -3,7 +3,8 @@
 مثل: factor x**2-4
 """
 import re
-from sympy import factor, sympify
+from sympy import factor
+from .normalizer import normalize, parse_expression
 
 def is_factor(question):
     """تحديد إذا كان السؤال تحليل"""
@@ -14,11 +15,16 @@ def is_factor(question):
 def solve(question):
     """تحليل العبارة"""
     try:
-        expr = question.lower()
-        for word in ['factor', 'تحليل']:
-            expr = expr.replace(word, '')
+        q = normalize(question)
         
-        expr = sympify(expr.strip())
+        expr_str = q
+        for word in ['factor', 'تحليل']:
+            expr_str = expr_str.replace(word, '')
+        
+        expr = parse_expression(expr_str.strip())
+        if expr is None:
+            return None
+        
         result = factor(expr)
         return str(result)
     except:
