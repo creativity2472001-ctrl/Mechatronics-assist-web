@@ -2,18 +2,28 @@
 حل العمليات الحسابية البسيطة
 مثل: 1+1, 2*3, (5+3)/2
 """
-import re
+from normalizer import normalize, parse_expression
 
 def is_arithmetic(question):
     """تحديد إذا كان السؤال عملية حسابية"""
-    q = question.replace(' ', '').replace('=', '')
-    return bool(re.match(r'^[\d+\-*/()]+$', q))
+    try:
+        q = normalize(question)
+        expr = parse_expression(q)
+        return expr is not None and len(expr.free_symbols) == 0
+    except:
+        return False
 
 def solve(question):
     """حل العملية الحسابية"""
-    q = question.replace(' ', '').replace('=', '')
     try:
-        result = eval(q)
+        q = normalize(question)
+        expr = parse_expression(q)
+        if expr is None:
+            return None
+        
+        result = expr.evalf()
+        if abs(result - round(result)) < 1e-10:
+            return str(int(result))
         return str(result)
     except:
         return None
