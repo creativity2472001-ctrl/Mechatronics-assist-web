@@ -2,31 +2,23 @@
 حل المعادلات الجبرية
 مثل: x+5=10, 2x-4=8, x²-5x+6=0
 """
-import re
-from sympy import symbols, Eq, solve, sympify
-
-x = symbols('x')
+from normalizer import normalize, parse_equation
+from sympy import solve
 
 def is_equation(question):
     """تحديد إذا كان السؤال معادلة"""
-    return '=' in question and 'x' in question.lower()
+    return '=' in question
 
 def solve(question):
     """حل المعادلة"""
     try:
-        # تنظيف السؤال
-        q = question.lower().replace(' ', '').replace('=', '=', 1)
+        q = normalize(question)
+        eq = parse_equation(q)
         
-        if '=' in q:
-            left, right = q.split('=')
-        else:
-            left, right = q, '0'
+        if eq is None:
+            return None
         
-        left_expr = sympify(left)
-        right_expr = sympify(right)
-        
-        eq = Eq(left_expr, right_expr)
-        solutions = solve(eq, x)
+        solutions = solve(eq)
         
         if len(solutions) == 0:
             return 'لا يوجد حل'
