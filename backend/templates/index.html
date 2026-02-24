@@ -1,1 +1,318 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>MathCore · المساعد الهندسي</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        body {
+            background: #f5f7fb;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        #header {
+            background: linear-gradient(135deg, #1a2e5c, #142347);
+            color: white;
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 10;
+        }
+        .logo {
+            font-size: 22px;
+            font-weight: 700;
+        }
+        .lang-switch {
+            display: flex;
+            gap: 8px;
+        }
+        .lang-btn {
+            background: rgba(255,255,255,0.15);
+            border: none;
+            color: white;
+            padding: 6px 14px;
+            border-radius: 30px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .lang-btn.active {
+            background: white;
+            color: #1a2e5c;
+        }
+        #chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        #answer-section {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        .domain-badge {
+            background: white;
+            padding: 12px 16px;
+            border-radius: 30px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 15px;
+            font-weight: 500;
+            color: #1a2e5c;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+            border: 1px solid #e0e7f0;
+            align-self: center;
+        }
+        .solution-card {
+            background: white;
+            border-radius: 32px;
+            padding: 30px 20px;
+            text-align: center;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.05);
+            margin-bottom: 15px;
+        }
+        #simplified-solution {
+            font-size: 52px;
+            font-weight: 800;
+            color: #142347;
+            background: #f8fbff;
+            padding: 30px 20px;
+            border-radius: 40px;
+            margin: 20px 0;
+            border: 2px dashed #cbd6e8;
+            word-break: break-word;
+            line-height: 1.2;
+        }
+        .note {
+            color: #6b7b94;
+            font-size: 15px;
+        }
+        #input-section {
+            background: white;
+            border-top: 1px solid #e2e8f0;
+            padding: 15px 15px 10px 15px;
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.02);
+        }
+        #question-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        #question {
+            flex: 1;
+            border: 2px solid #dce3ef;
+            border-radius: 30px;
+            padding: 16px 20px;
+            font-size: 18px;
+            font-family: 'Courier New', monospace;
+            background: #f9fcff;
+            outline: none;
+            transition: 0.2s;
+        }
+        #question:focus {
+            border-color: #1a2e5c;
+            background: white;
+        }
+        #solve-btn {
+            background: #1a2e5c;
+            border: none;
+            color: white;
+            width: 60px;
+            height: 60px;
+            border-radius: 30px;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(26,46,92,0.3);
+            transition: 0.2s;
+            flex-shrink: 0;
+        }
+        #solve-btn:active {
+            transform: scale(0.95);
+            background: #0f1f3f;
+        }
+        #keyboard-toggle {
+            background: #edf2f9;
+            border-radius: 30px;
+            padding: 12px;
+            text-align: center;
+            font-size: 16px;
+            font-weight: 600;
+            color: #1a2e5c;
+            margin-bottom: 15px;
+            cursor: pointer;
+            border: 1px solid #d0dbea;
+        }
+        #math-keyboard {
+            display: none;
+            background: #f1f5fc;
+            border-radius: 30px;
+            padding: 15px 12px;
+            margin-bottom: 10px;
+        }
+        .keyboard-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 8px;
+        }
+        .keyboard-btn {
+            background: white;
+            border: none;
+            aspect-ratio: 1/1;
+            border-radius: 30px;
+            font-size: 24px;
+            font-weight: 600;
+            color: #142347;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            cursor: pointer;
+            transition: 0.1s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #d2def0;
+        }
+        .keyboard-btn:active {
+            background: #1a2e5c;
+            color: white;
+            transform: scale(0.9);
+        }
+        @media (max-width: 480px) {
+            .keyboard-grid {
+                grid-template-columns: repeat(5, 1fr);
+            }
+            #simplified-solution {
+                font-size: 42px;
+                padding: 20px 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <div class="logo">MathCore</div>
+        <div class="lang-switch">
+            <button class="lang-btn active" onclick="switchLang('ar')" id="btn-ar">🇸🇦 عربي</button>
+            <button class="lang-btn" onclick="switchLang('en')" id="btn-en">🇬🇧 EN</button>
+        </div>
+    </div>
 
+    <div id="chat-container">
+        <div id="answer-section">
+            <div class="domain-badge" id="domain-badge">
+                <span data-ar="🧠 تم تحليل سؤالك كـ" data-en="🧠 Detected as">🧠 تم تحليل سؤالك كـ</span>
+                <strong id="domain-name">رياضيات</strong>
+                <span id="confidence-value"> · 98%</span>
+            </div>
+            <div class="solution-card">
+                <div style="font-size: 20px; color: #1a2e5c; margin-bottom: 5px;" data-ar="📋 الحل" data-en="📋 Solution">📋 الحل</div>
+                <div id="simplified-solution" data-ar="اكتب سؤالك" data-en="Enter question">اكتب سؤالك</div>
+                <div class="note" data-ar="✨ دقة عالية" data-en="✨ High accuracy">✨ دقة عالية</div>
+            </div>
+        </div>
+
+        <div id="input-section">
+            <div id="question-container">
+                <input type="text" id="question" placeholder="اكتب مسألتك هنا...">
+                <button id="solve-btn" onclick="sendQuestion()">↵</button>
+            </div>
+            <div id="keyboard-toggle" onclick="toggleKeyboard()">🔢 إظهار لوحة الأرقام</div>
+            <div id="math-keyboard">
+                <div class="keyboard-grid">
+                    <button class="keyboard-btn" onclick="insertSymbol('1')">1</button>
+                    <button class="keyboard-btn" onclick="insertSymbol('2')">2</button>
+                    <button class="keyboard-btn" onclick="insertSymbol('3')">3</button>
+                    <button class="keyboard-btn" onclick="insertSymbol('+')">+</button>
+                    <button class="keyboard-btn" onclick="insertSymbol('-')">−</button>
+                    <button class="keyboard-btn" onclick="insertSymbol('*')">×</button>
+                    <button class="keyboard-btn" onclick="insertSymbol('4')">4</button>
+                    <button class="keyboard-btn" onclick="insertSymbol('5')">5</button>
+                    <button class="keyboard-btn" onclick="insertSymbol('6')">6</button>
+                    <button class="keyboard-btn" onclick="insertSymbol('/')">÷</button>
+                    <button class="keyboard-btn" onclick="insertSymbol('=')">=</button>
+                    <button class="keyboard-btn" onclick="insertSymbol('^')">^</button>
+                    <button class="keyboard-btn" onclick="insertSymbol('7')">7</button>
+                    <button class="keyboard-btn" onclick="insertSymbol('8')">8</button>
+                    <button class="keyboard-btn" onclick="insertSymbol('9')">9</button>
+                    <button class="keyboard-btn" onclick="insertSymbol('(')">(</button>
+                    <button class="keyboard-btn" onclick="insertSymbol(')')">)</button>
+                    <button class="keyboard-btn" onclick="insertSymbol('√')">√</button>
+                    <button class="keyboard-btn" onclick="insertSymbol('0')">0</button>
+                    <button class="keyboard-btn" onclick="insertSymbol('.')">.</button>
+                    <button class="keyboard-btn" onclick="insertSymbol('π')">π</button>
+                    <button class="keyboard-btn" onclick="insertSymbol('∞')">∞</button>
+                    <button class="keyboard-btn" onclick="insertSymbol('∫')">∫</button>
+                    <button class="keyboard-btn" onclick="insertSymbol('Σ')">Σ</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentLang = 'ar';
+
+        function switchLang(lang) {
+            currentLang = lang;
+            document.getElementById('btn-ar').classList.toggle('active', lang === 'ar');
+            document.getElementById('btn-en').classList.toggle('active', lang === 'en');
+            document.querySelectorAll('[data-ar][data-en]').forEach(el => {
+                el.innerText = el.getAttribute(`data-${lang}`);
+            });
+            document.getElementById('question').placeholder = lang === 'ar' ? 'اكتب مسألتك هنا...' : 'Enter your problem...';
+            document.getElementById('keyboard-toggle').innerText = lang === 'ar' ? '🔢 إظهار لوحة الأرقام' : '🔢 Show keypad';
+            document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+        }
+
+        function toggleKeyboard() {
+            const kb = document.getElementById('math-keyboard');
+            kb.style.display = kb.style.display === 'grid' ? 'none' : 'grid';
+        }
+
+        function insertSymbol(sym) {
+            const q = document.getElementById('question');
+            q.value += sym;
+            q.focus();
+        }
+
+        function sendQuestion() {
+            const q = document.getElementById('question').value.trim();
+            if (!q) return alert(currentLang === 'ar' ? 'اكتب مسألة' : 'Enter a question');
+            
+            const sol = document.getElementById('simplified-solution');
+            sol.innerText = currentLang === 'ar' ? '⏳ جاري الحل...' : '⏳ Solving...';
+
+            fetch('/api/solve', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({question: q, language: currentLang})
+            })
+            .then(r => r.json())
+            .then(data => {
+                sol.innerText = data.simple_answer || (currentLang === 'ar' ? 'تم' : 'Done');
+                if (data.domain) document.getElementById('domain-name').innerText = data.domain;
+                if (data.confidence) document.getElementById('confidence-value').innerText = ` · ${data.confidence}%`;
+            })
+            .catch(() => {
+                sol.innerText = currentLang === 'ar' ? '❌ خطأ' : '❌ Error';
+            });
+        }
+
+        switchLang('ar');
+    </script>
+</body>
+</html>
