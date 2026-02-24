@@ -3,7 +3,8 @@
 مثل: simplify (x**2-1)/(x-1)
 """
 import re
-from sympy import simplify, sympify
+from sympy import simplify
+from .normalizer import normalize, parse_expression
 
 def is_simplify(question):
     """تحديد إذا كان السؤال تبسيط"""
@@ -14,11 +15,16 @@ def is_simplify(question):
 def solve(question):
     """تبسيط التعبير"""
     try:
-        expr = question.lower()
-        for word in ['simplify', 'تبسيط']:
-            expr = expr.replace(word, '')
+        q = normalize(question)
         
-        expr = sympify(expr.strip())
+        expr_str = q
+        for word in ['simplify', 'تبسيط']:
+            expr_str = expr_str.replace(word, '')
+        
+        expr = parse_expression(expr_str.strip())
+        if expr is None:
+            return None
+        
         result = simplify(expr)
         return str(result)
     except:
