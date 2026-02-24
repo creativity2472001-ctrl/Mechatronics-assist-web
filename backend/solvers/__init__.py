@@ -1,4 +1,6 @@
-# هذا الملف يجعل المجلد package
+"""
+ملف الربط بين جميع الحلول
+"""
 from . import arithmetic
 from . import equations
 from . import derivatives
