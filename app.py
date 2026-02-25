@@ -1,11 +1,11 @@
 from flask import Flask, render_template, request, jsonify
-from sympy import symbols, Eq, solve, diff, integrate, limit, Function, Integer, sin, cos, tan, log, exp, sqrt, pi, oo, I
+from sympy import symbols, Eq, solve, diff, integrate, limit, Function, Integer
 from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication
 import requests
 import os
 import json
-import re
 import traceback
+import re
 from dotenv import load_dotenv
 
 # محاولة استيراد json5
@@ -16,23 +16,33 @@ except ImportError:
     HAS_JSON5 = False
     print("⚠️ json5 غير مثبت. استخدم: pip install json5")
 
+# تحميل متغيرات البيئة
 load_dotenv()
 
 app = Flask(__name__)
 
 # ============================================================
-# الرموز الأساسية
+# الرموز الرياضية الأساسية
 # ============================================================
-
 x, y, z, t = symbols('x y z t')
 f = Function('f')
 
 SAFE_MATH = {
     "x": x, "y": y, "z": z, "t": t,
-    "sin": sin, "cos": cos, "tan": tan,
-    "log": log, "exp": exp, "sqrt": sqrt,
-    "pi": pi, "oo": oo, "I": I,
-    "Eq": Eq, "Function": Function,
+    "sin": __import__('sympy').sin,
+    "cos": __import__('sympy').cos,
+    "tan": __import__('sympy').tan,
+    "log": __import__('sympy').log,
+    "exp": __import__('sympy').exp,
+    "sqrt": __import__('sympy').sqrt,
+    "pi": __import__('sympy').pi,
+    "oo": __import__('sympy').oo,
+    "I": __import__('sympy').I,
+    "Eq": Eq,
+    "Derivative": __import__('sympy').Derivative,
+    "Matrix": __import__('sympy').Matrix,
+    "Function": Function,
+    "f": f,
     "Integer": Integer
 }
 
@@ -40,57 +50,26 @@ transformations = standard_transformations + (implicit_multiplication,)
 
 def safe_parse(expr_str):
     try:
-        return parse_expr(expr_str, local_dict=SAFE_MATH, global_dict={}, transformations=transformations)
+        return parse_expr(
+            expr_str, 
+            local_dict=SAFE_MATH, 
+            global_dict={}, 
+            transformations=transformations
+        )
     except Exception as e:
-        print(f"❌ خطأ في تحليل التعبير: {e}")
+        print(f"❌ خطأ في parse: {e}")
         return None
 
 # ============================================================
-# مفتاح OpenRouter
+# إعداد مفتاح OpenRouter
 # ============================================================
-
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-if not OPENROUTER_API_KEY:
-    print("⚠️ مفتاح OpenRouter غير موجود. المسائل المعقدة لن تعمل.")
 
 # ============================================================
-# مسائل بسيطة مباشرة
+# وظائف OpenRouter
 # ============================================================
-
-def solve_simple_math(question):
-    """حل المسائل البسيطة مباشرة بـ SymPy"""
-    try:
-        question = question.replace("^", "**").replace(" ", "")
-        
-        # حسابات بسيطة
-        if re.fullmatch(r'[\d\+\-\*/\.\(\)]+', question):
-            expr = safe_parse(question)
-            if expr is not None:
-                return str(expr.evalf())
-        
-        # معادلات بسيطة
-        if '=' in question:
-            parts = question.split('=')
-            if len(parts) == 2:
-                left = safe_parse(parts[0])
-                right = safe_parse(parts[1])
-                if left is not None and right is not None:
-                    eq = Eq(left, right)
-                    solutions = solve(eq, x)
-                    return f"الحل: x = {solutions}"
-        
-        return None
-    except Exception as e:
-        print(f"⚠️ خطأ في الحل المباشر: {e}")
-        return None
-
-# ============================================================
-# الاتصال بـ OpenRouter
-# ============================================================
-
 def clean_json_text(text):
-    if not text:
-        return None
+    if not text: return None
     start = text.find('{')
     end = text.rfind('}')
     if start != -1 and end != -1 and end > start:
@@ -98,139 +77,226 @@ def clean_json_text(text):
     return None
 
 def extract_json_advanced(text):
-    if not text:
-        return None
     cleaned = clean_json_text(text)
-    if not cleaned:
-        return None
+    if not cleaned: return None
     if HAS_JSON5:
         try:
-            data = json5.loads(cleaned)
-            if isinstance(data, dict):
-                return data
-        except: pass
+            return json5.loads(cleaned)
+        except:
+            pass
     try:
-        data = json.loads(cleaned)
-        if isinstance(data, dict):
-            return data
-    except: pass
+        return json.loads(cleaned)
+    except:
+        pass
     return None
 
 def ask_openrouter(question):
-    if not OPENROUTER_API_KEY:
+    if not OPENROUTER_API_KEY: 
         return None
-    prompt = f"""أنت محلل رياضي دقيق. أعد JSON صالح فقط.
-السؤال: {question}"""
-    
-    headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
+        
+    prompt = f"""أنت محلل رياضي. حوّل أي سؤال كلامي أو غامض إلى JSON لصيغة SymPy. أعد JSON فقط.
+
+السؤال: {question}
+
+أمثلة JSON:
+{{"type": "solve", "expression": "x**2 + 5*x + 6", "variable": "x"}}
+{{"type": "diff", "expression": "sin(2*x)", "variable": "x", "order": 1}}
+{{"type": "integrate", "expression": "x**2", "variable": "x", "lower": 0, "upper": 2"}}
+{{"type": "calculate", "expression": "2+2"}}
+"""
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json"
+    }
     data = {
         "model": "deepseek/deepseek-chat",
-        "messages": [{"role": "system", "content": "أنت محلل رياضي. أعد JSON فقط."},
-                     {"role": "user", "content": prompt}],
+        "messages": [
+            {"role": "system", "content": "أنت محلل رياضي دقيق. أعد JSON فقط."},
+            {"role": "user", "content": prompt}
+        ],
         "temperature": 0,
         "max_tokens": 1000
     }
-    
     try:
         print("📡 جاري الاتصال بـ OpenRouter...")
-        response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data, timeout=30)
-        if response.status_code == 200:
-            result = response.json()['choices'][0]['message']['content']
-            print(f"🔧 استجابة OpenRouter: {result[:200]}...")
+        r = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            json=data,
+            timeout=30
+        )
+        if r.status_code == 200:
+            result = r.json()['choices'][0]['message']['content']
+            print(f"🔧 استجابة: {result[:100]}...")
             return result
         else:
-            print(f"❌ خطأ من OpenRouter: {response.status_code}")
-            return None
+            print(f"❌ خطأ OpenRouter: {r.status_code}")
     except Exception as e:
-        print(f"🔥 خطأ في الاتصال: {e}")
-        return None
+        print(f"🔥 خطأ: {e}")
+    return None
 
 # ============================================================
-# تنفيذ العمليات الرياضية
+# تنفيذ SymPy
 # ============================================================
-
-def execute_math_command(command_json):
+def execute_math_command(cmd):
     try:
-        cmd_type = command_json.get("type", "")
-        if cmd_type == "solve":
-            expr = safe_parse(command_json.get("expression", ""))
-            var = symbols(command_json.get("variable", "x"))
-            if expr: return str(solve(expr, var)), None
-        elif cmd_type == "diff":
-            expr = safe_parse(command_json.get("expression", ""))
-            var = symbols(command_json.get("variable", "x"))
-            order = command_json.get("order", 1)
-            if expr: return str(diff(expr, var, order)), None
-        elif cmd_type == "integrate":
-            expr = safe_parse(command_json.get("expression", ""))
-            var = symbols(command_json.get("variable", "x"))
+        t = cmd.get("type")
+        
+        if t == "solve":
+            expr = safe_parse(cmd.get("expression", ""))
+            var = symbols(cmd.get("variable", "x"))
             if expr:
-                if "lower" in command_json and "upper" in command_json:
-                    lower = safe_parse(str(command_json["lower"]))
-                    upper = safe_parse(str(command_json["upper"]))
+                return str(solve(expr, var)), None
+                
+        elif t == "diff":
+            expr = safe_parse(cmd.get("expression", ""))
+            var = symbols(cmd.get("variable", "x"))
+            order = cmd.get("order", 1)
+            if expr:
+                return str(diff(expr, var, order)), None
+                
+        elif t == "integrate":
+            expr = safe_parse(cmd.get("expression", ""))
+            var = symbols(cmd.get("variable", "x"))
+            if expr:
+                if "lower" in cmd and "upper" in cmd:
+                    lower = safe_parse(str(cmd["lower"]))
+                    upper = safe_parse(str(cmd["upper"]))
                     return str(integrate(expr, (var, lower, upper))), None
-                return str(integrate(expr, var)) + " + C", None
-        elif cmd_type == "limit":
-            expr = safe_parse(command_json.get("expression", ""))
-            var = symbols(command_json.get("variable", "x"))
-            point = command_json.get("point", 0)
-            if expr: return str(limit(expr, var, point)), None
-        elif cmd_type == "calculate":
-            expr = safe_parse(command_json.get("expression", ""))
-            if expr: return str(expr.evalf()), None
-        return None, f"نوع العملية '{cmd_type}' غير مدعوم"
+                else:
+                    return str(integrate(expr, var)) + " + C", None
+                
+        elif t == "limit":
+            expr = safe_parse(cmd.get("expression", ""))
+            var = symbols(cmd.get("variable", "x"))
+            point = safe_parse(str(cmd.get("point", 0)))
+            if expr:
+                return str(limit(expr, var, point)), None
+                
+        elif t == "calculate":
+            expr = safe_parse(cmd.get("expression", ""))
+            if expr:
+                return str(expr.evalf()), None
+                
+        return None, f"نوع العملية {t} غير مدعوم"
+        
     except Exception as e:
-        print(f"❌ خطأ في التنفيذ: {e}")
         traceback.print_exc()
         return None, str(e)
 
 # ============================================================
-# Flask Routes
+# الحل المباشر لـ SymPy (للمسائل الواضحة)
 # ============================================================
+def solve_simple_math(question):
+    try:
+        q = question.replace(" ", "").replace("^", "**")
+        print(f"🔍 معالجة: {q}")
+        
+        # ===== الحسابات البسيطة (أرقام فقط) =====
+        # التحقق من أن السؤال عبارة عن أرقام وعمليات فقط
+        if all(c in '0123456789+-*/().' for c in q):
+            print("✅ تم التعرف على تعبير عددي")
+            
+            # الطريقة 1: استخدام eval الآمن للأرقام فقط
+            try:
+                result = eval(q)
+                print(f"📊 eval: {q} = {result}")
+                return str(result)
+            except Exception as e:
+                print(f"⚠️ eval فشل: {e}")
+            
+            # الطريقة 2: استخدام SymPy
+            expr = safe_parse(q)
+            if expr:
+                result = expr.evalf()
+                print(f"📊 SymPy: {q} = {result}")
+                return str(result)
+        
+        # ===== المعادلات =====
+        if '=' in q:
+            print("✅ تم التعرف على معادلة")
+            parts = q.split('=')
+            if len(parts) == 2:
+                left = safe_parse(parts[0])
+                right = safe_parse(parts[1])
+                if left and right:
+                    eq = Eq(left, right)
+                    solutions = solve(eq, x)
+                    return f"الحل: x = {solutions}"
+        
+        return None
+        
+    except Exception as e:
+        print(f"⚠️ خطأ في الحل المباشر: {e}")
+        return None
 
+# ============================================================
+# مسار API
+# ============================================================
 @app.route('/')
 def home():
     return render_template('index.html')
 
 @app.route('/api/solve', methods=['POST'])
-def solve_route():
+def solve_api():
     data = request.json
-    question = data.get('question', '').strip()
-    print(f"\n📝 سؤال المستخدم: {question}")
+    q = data.get('question', '').strip()
     
-    if not question:
-        return jsonify({"success": False, "simple_answer": "❌ السؤال فارغ"})
+    print(f"\n{'='*50}")
+    print(f"📝 سؤال المستخدم: {q}")
+    print(f"{'='*50}")
     
-    # المستوى 1: SymPy مباشر
-    simple_result = solve_simple_math(question)
+    if not q:
+        return jsonify(success=False, simple_answer="❌ السؤال فارغ")
+
+    # المستوى 1: حل مباشر
+    simple_result = solve_simple_math(q)
     if simple_result:
-        print("✅ تم الحل مباشرة بـ SymPy")
-        return jsonify({"success": True, "simple_answer": simple_result, "domain": "رياضيات", "confidence": 100})
-    
-    # المستوى 2: OpenRouter
+        print(f"✅ حل مباشر: {simple_result}")
+        return jsonify(
+            success=True, 
+            simple_answer=simple_result, 
+            domain="رياضيات", 
+            confidence=100
+        )
+
+    # المستوى 2: OpenRouter لفهم السؤال
     if OPENROUTER_API_KEY:
-        analysis = ask_openrouter(question)
+        print("🔄 استخدام OpenRouter...")
+        analysis = ask_openrouter(q)
         if analysis:
-            command_json = extract_json_advanced(analysis)
-            if command_json:
-                result, error = execute_math_command(command_json)
+            cmd_json = extract_json_advanced(analysis)
+            if cmd_json:
+                print(f"📦 JSON: {cmd_json}")
+                result, error = execute_math_command(cmd_json)
                 if result:
-                    return jsonify({"success": True, "simple_answer": result, "domain": "رياضيات", "confidence": 95})
-    
-    # اقتراح صيغة
-    examples = ["x^2 + 5x + 6 = 0", "مشتقة sin(2x)", "تكامل x^2 من 0 إلى 2", "1+1", "2*3"]
-    import random
-    example = random.choice(examples)
-    
-    return jsonify({"success": True, "simple_answer": "❓ لم أتمكن من حل السؤال",
-                    "suggestion": f"جرب صيغة واضحة مثل: {example}", "domain": "رياضيات", "confidence": 0})
+                    print(f"✅ حل OpenRouter: {result}")
+                    return jsonify(
+                        success=True, 
+                        simple_answer=result, 
+                        domain="رياضيات", 
+                        confidence=95
+                    )
+                else:
+                    print(f"❌ فشل التنفيذ: {error}")
+
+    # فشل كل شيء
+    return jsonify(
+        success=True, 
+        simple_answer="❓ لم أتمكن من حل السؤال. جرب كتابته بصيغة واضحة مثل:\n• 1+1\n• x+5=10\n• مشتقة sin(x)\n• تكامل x^2", 
+        domain="رياضيات", 
+        confidence=0
+    )
 
 # ============================================================
 # تشغيل التطبيق
 # ============================================================
-
-if __name__ == '__main__':
-    print("\n🚀 MathCore - SymPy + OpenRouter فقط")
+if __name__ == "__main__":
+    print("\n" + "="*60)
+    print("🚀 MathCore - SymPy + OpenRouter")
+    print("="*60)
     print(f"🔑 OpenRouter: {'✅ متصل' if OPENROUTER_API_KEY else '❌ غير متصل'}")
-    print("🌐 http://127.0.0.1:5000\n")
+    print("🌐 http://127.0.0.1:5000")
+    print("="*60 + "\n")
+    
     app.run(debug=True, host='127.0.0.1', port=5000)
