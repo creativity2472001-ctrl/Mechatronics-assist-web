@@ -1,21 +1,20 @@
+# test_openrouter.py
 import os
 import requests
-import json
+from dotenv import load_dotenv
 
-# تحميل مفتاح OpenRouter من متغير البيئة
+# ===== تحميل متغيرات البيئة =====
+load_dotenv()
+
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-
 if not OPENROUTER_API_KEY:
     raise Exception("⚠️ لم يتم العثور على مفتاح OpenRouter في المتغيرات البيئية!")
 
-def ask_openrouter(question):
-    prompt = f"""أنت محلل رياضي. حوّل أي سؤال إلى JSON لصيغة SymPy. أعد JSON فقط.
+# ===== اختبار الاتصال بـ OpenRouter =====
+def test_openrouter(question="أوجد مشتقة sin(x)"):
+    prompt = f"""أنت محلل رياضي دقيق. أعد JSON فقط لتحليل السؤال التالي:
 
 السؤال: {question}
-
-أمثلة JSON:
-{{"type": "solve", "expression": "x**2 + 5*x + 6", "variable": "x"}}
-{{"type": "diff", "expression": "sin(2*x)", "variable": "x", "order": 1}}
 """
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -30,19 +29,24 @@ def ask_openrouter(question):
         "temperature": 0,
         "max_tokens": 1000
     }
-    r = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data)
-    if r.status_code == 200:
-        content = r.json()['choices'][0]['message']['content']
-        try:
-            parsed = json.loads(content)
-        except:
-            parsed = content
-        return parsed
-    else:
-        return f"❌ خطأ OpenRouter: {r.status_code} - {r.text}"
+    
+    try:
+        print("📡 جاري الاتصال بـ OpenRouter...")
+        r = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            json=data,
+            timeout=30
+        )
+        if r.status_code == 200:
+            result = r.json()['choices'][0]['message']['content']
+            print("✅ استجابة OpenRouter:")
+            print(result)
+        else:
+            print(f"❌ خطأ OpenRouter: {r.status_code} - {r.text}")
+    except Exception as e:
+        print(f"🔥 خطأ أثناء الاتصال بـ OpenRouter: {e}")
 
+# ===== تشغيل الاختبار =====
 if __name__ == "__main__":
-    question = input("اكتب السؤال الرياضي: ")
-    result = ask_openrouter(question)
-    print("🔹 استجابة OpenRouter:")
-    print(result)
+    test_openrouter()
