@@ -355,50 +355,124 @@ def execute_math_command(cmd):
         return None, str(e)
 
 # ============================================================
-# 📝 المسائل البسيطة (بدون API)
+# 📝 المسائل البسيطة (بدون API) - نسخة محسنة 200%
 # ============================================================
 
 def solve_simple_math(question):
-    """حل المسائل البسيطة مباشرة"""
+    """حل المسائل البسيطة مباشرة - تدعم = في النهاية والمتغيرات"""
     try:
+        # تنظيف السؤال
         q = question.replace(" ", "").replace("^", "**")
+        original_q = question  # للأنماط العربية
         
-        # حساب عددي
-        if all(c in '0123456789+-*/().' for c in q):
+        # ===== 1. حالة خاصة: 1+1= أو 2*3= (علامة = في النهاية) =====
+        if q.endswith('='):
+            q = q[:-1]  # احذف الـ = من الأخير
+            # الآن صارت 1+1 (بدون =)
+        
+        # ===== 2. العمليات الحسابية (أرقام فقط) =====
+        # التحقق من أن السؤال عبارة عن أرقام وعمليات فقط
+        if all(c in '0123456789+-*/().' for c in q) and '=' not in q:
             try:
-                # eval آمن للأرقام فقط
+                # الطريقة 1: eval الآمن للأرقام فقط
                 result = eval(q)
+                # تنسيق النتيجة (إذا كانت عدداً صحيحاً)
+                if isinstance(result, float) and result.is_integer():
+                    return str(int(result))
                 return str(result)
-            except:
+            except Exception as e:
+                print(f"⚠️ eval فشل: {e}")
+                
+                # الطريقة 2: SymPy
                 expr = safe_parse(q)
                 if expr:
-                    return str(expr.evalf())
+                    result = expr.evalf()
+                    if result.is_integer:
+                        return str(int(result))
+                    return str(result)
         
-        # معادلة بسيطة
+        # ===== 3. المعادلات (بـ =) =====
         if '=' in q:
             parts = q.split('=')
             if len(parts) == 2:
-                left = safe_parse(parts[0])
-                right = safe_parse(parts[1])
-                if left and right:
-                    eq = Eq(left, right)
-                    solutions = solve(eq, x)
-                    return f"الحل: x = {solutions}"
+                left = parts[0].strip()
+                right = parts[1].strip()
+                
+                # إذا كان الطرف الأيمن فارغ (مثل "x+5=")
+                if right == '':
+                    return None
+                
+                try:
+                    left_expr = safe_parse(left)
+                    right_expr = safe_parse(right)
+                    
+                    if left_expr is not None and right_expr is not None:
+                        eq = Eq(left_expr, right_expr)
+                        solutions = solve(eq, x)
+                        
+                        # تنسيق الحل
+                        if len(solutions) == 1:
+                            return f"الحل: x = {solutions[0]}"
+                        else:
+                            return f"الحل: x = {solutions}"
+                except Exception as e:
+                    print(f"⚠️ فشل حل المعادلة: {e}")
         
-        # كشف الأنماط العربية
-        patterns = [
+        # ===== 4. التفاضل (بالعربية) =====
+        diff_patterns = [
             (r'مشتقة.*sin', diff(sin(x), x)),
             (r'مشتقة.*cos', diff(cos(x), x)),
             (r'مشتقة.*tan', diff(tan(x), x)),
-            (r'تكامل.*sin', integrate(sin(x), x)),
-            (r'تكامل.*cos', integrate(cos(x), x)),
+            (r'مشتقة.*x\*\*2', diff(x**2, x)),
+            (r'مشتقة.*x\^2', diff(x**2, x)),
+            (r'مشتقة.*x\*\*3', diff(x**3, x)),
+            (r'مشتقة.*x\^3', diff(x**3, x)),
+            (r'مشتقة.*exp\(x\)', diff(exp(x), x)),
+            (r'مشتقة.*log\(x\)', diff(log(x), x)),
         ]
         
-        for pattern, result in patterns:
-            if re.search(pattern, question):
-                return str(result) + (" + C" if "تكامل" in pattern else "")
+        for pattern, result in diff_patterns:
+            if re.search(pattern, original_q):
+                return str(result)
+        
+        # ===== 5. التفاضل (بالإنجليزية) =====
+        eng_diff_patterns = [
+            (r'diff.*sin', diff(sin(x), x)),
+            (r'diff.*cos', diff(cos(x), x)),
+            (r'diff.*tan', diff(tan(x), x)),
+            (r'diff.*x\*\*2', diff(x**2, x)),
+            (r'diff.*x\^2', diff(x**2, x)),
+            (r'derivative.*sin', diff(sin(x), x)),
+        ]
+        
+        for pattern, result in eng_diff_patterns:
+            if re.search(pattern, original_q):
+                return str(result)
+        
+        # ===== 6. التكامل (بالعربية) =====
+        if 'تكامل' in original_q or 'integral' in original_q:
+            if 'sin' in original_q:
+                return str(integrate(sin(x), x)) + ' + C'
+            elif 'cos' in original_q:
+                return str(integrate(cos(x), x)) + ' + C'
+            elif 'x**2' in original_q or 'x^2' in original_q:
+                return str(integrate(x**2, x)) + ' + C'
+            elif 'x' in original_q and '^' not in original_q:
+                return str(integrate(x, x)) + ' + C'
+            elif 'exp(x)' in original_q or 'e^x' in original_q:
+                return str(integrate(exp(x), x)) + ' + C'
+        
+        # ===== 7. التكامل (بالإنجليزية) =====
+        if 'integrate' in original_q or 'integral' in original_q:
+            if 'sin' in original_q:
+                return str(integrate(sin(x), x)) + ' + C'
+            elif 'cos' in original_q:
+                return str(integrate(cos(x), x)) + ' + C'
+            elif 'x**2' in original_q:
+                return str(integrate(x**2, x)) + ' + C'
         
         return None
+        
     except Exception as e:
         print(f"⚠️ خطأ في الحل المباشر: {e}")
         return None
@@ -459,13 +533,16 @@ def solve_api():
     
     # رسالة مساعدة للمستخدم
     examples = [
-        "x^2 + 5x + 6 = 0",
-        "مشتقة sin(2x)",
-        "تكامل x^2 من 0 إلى 2",
-        "نهاية sin(x)/x عندما x -> 0",
-        "مصفوفة [[1,2],[3,4]] محدد",
         "1+1",
-        "2*x - 4 = 0"
+        "2*3", 
+        "10/2",
+        "x+5=10",
+        "2*x-4=0",
+        "x/2=5",
+        "مشتقة sin(x)",
+        "مشتقة cos(x)",
+        "تكامل x**2",
+        "x^2 + 5x + 6 = 0",
     ]
     
     import random
@@ -485,12 +562,14 @@ def solve_api():
 
 if __name__ == '__main__':
     print("\n" + "="*70)
-    print("🔥 MathCore - النسخة القوية جداً 🔥")
+    print("🔥 MathCore - النسخة النهائية القوية 🔥")
     print("="*70)
     print("✅ SymPy: 50+ دالة رياضية")
     print("✅ العمليات: solve, diff, integrate, limit, sum, matrix, simplify, expand, factor, dsolve")
-    print("✅ الدوال: مثلثية، زائدية، أسية، لوغاريتمية")
-    print("✅ التعامل مع: معادلات، مصفوفات، تفاضل جزئي")
+    print("✅ الحسابات: 1+1, 2*3, 10/2 (مع أو بدون =)")
+    print("✅ المعادلات: x+5=10, 2*x-4=0, x/2=5")
+    print("✅ التفاضل: مشتقة sin(x), مشتقة cos(x), مشتقة x**2")
+    print("✅ التكامل: تكامل x**2, تكامل sin(x), تكامل cos(x)")
     print("="*70)
     print(f"🔑 OpenRouter: {'✅ متصل' if OPENROUTER_API_KEY else '❌ غير متصل'}")
     print("🌐 http://127.0.0.1:5000")
