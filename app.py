@@ -12,8 +12,9 @@ except ImportError:
     HAS_JSON5 = False
     print("⚠️ json5 غير مثبت. استخدم: pip install json5")
 
-# تحميل متغيرات البيئة
-load_dotenv()
+# ==================== تحميل متغيرات البيئة ====================
+load_dotenv()  # تحميل ملف .env
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")  # قراءة المفتاح من المتغيرات
 
 app = Flask(__name__)
 
@@ -54,9 +55,6 @@ def safe_parse(expr_str):
         print(f"❌ خطأ في parse: {e}")
         return None
 
-# ==================== إعداد مفتاح OpenRouter ====================
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-
 # ==================== وظائف OpenRouter ====================
 def clean_json_text(text):
     if not text: return None
@@ -82,6 +80,7 @@ def extract_json_advanced(text):
 
 def ask_openrouter(question):
     if not OPENROUTER_API_KEY: 
+        print("❌ لم يتم تعيين مفتاح OpenRouter في متغيرات البيئة!")
         return None
         
     prompt = f"""أنت محلل رياضي. حوّل أي سؤال كلامي أو غامض إلى JSON لصيغة SymPy. أعد JSON فقط.
@@ -120,7 +119,7 @@ def ask_openrouter(question):
             print(f"🔧 استجابة: {result[:100]}...")
             return result
         else:
-            print(f"❌ خطأ OpenRouter: {r.status_code}")
+            print(f"❌ خطأ OpenRouter: {r.status_code} - {r.text}")
     except Exception as e:
         print(f"🔥 خطأ: {e}")
     return None
@@ -205,7 +204,6 @@ def solve_simple_math(question):
                     if not vars_in_eq:
                         return str(eq)
                     solutions = solve(eq, vars_in_eq)
-                    # عرض طريقة الحل باستخدام pretty
                     solution_str = ", ".join([f"{pretty(var)} = {pretty(val)}" for var, val in zip(vars_in_eq, solutions)]) if solutions else "لا يوجد حل"
                     return f"الحل: {solution_str}"
                 else:
