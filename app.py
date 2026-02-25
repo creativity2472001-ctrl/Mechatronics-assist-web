@@ -1,11 +1,7 @@
 from flask import Flask, render_template, request, jsonify
-from sympy import symbols, Eq, solve, diff, integrate, limit, Function, Integer
+from sympy import symbols, Eq, solve, diff, integrate, limit, Function, Integer, pretty
 from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication
-import requests
-import os
-import json
-import traceback
-import re
+import requests, os, json, traceback, re
 from dotenv import load_dotenv
 
 # محاولة استيراد json5
@@ -21,9 +17,7 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# ============================================================
-# الرموز الرياضية الأساسية
-# ============================================================
+# ==================== الرموز الرياضية ====================
 x, y, z, t = symbols('x y z t')
 f = Function('f')
 
@@ -60,14 +54,10 @@ def safe_parse(expr_str):
         print(f"❌ خطأ في parse: {e}")
         return None
 
-# ============================================================
-# إعداد مفتاح OpenRouter
-# ============================================================
+# ==================== إعداد مفتاح OpenRouter ====================
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-# ============================================================
-# وظائف OpenRouter
-# ============================================================
+# ==================== وظائف OpenRouter ====================
 def clean_json_text(text):
     if not text: return None
     start = text.find('{')
@@ -135,9 +125,7 @@ def ask_openrouter(question):
         print(f"🔥 خطأ: {e}")
     return None
 
-# ============================================================
-# تنفيذ SymPy
-# ============================================================
+# ==================== تنفيذ SymPy ====================
 def execute_math_command(cmd):
     try:
         t = cmd.get("type")
@@ -146,14 +134,15 @@ def execute_math_command(cmd):
             expr = safe_parse(cmd.get("expression", ""))
             var = symbols(cmd.get("variable", "x"))
             if expr:
-                return str(solve(expr, var)), None
+                solutions = solve(expr, var)
+                return solutions, None
                 
         elif t == "diff":
             expr = safe_parse(cmd.get("expression", ""))
             var = symbols(cmd.get("variable", "x"))
             order = cmd.get("order", 1)
             if expr:
-                return str(diff(expr, var, order)), None
+                return diff(expr, var, order), None
                 
         elif t == "integrate":
             expr = safe_parse(cmd.get("expression", ""))
@@ -162,21 +151,21 @@ def execute_math_command(cmd):
                 if "lower" in cmd and "upper" in cmd:
                     lower = safe_parse(str(cmd["lower"]))
                     upper = safe_parse(str(cmd["upper"]))
-                    return str(integrate(expr, (var, lower, upper))), None
+                    return integrate(expr, (var, lower, upper)), None
                 else:
-                    return str(integrate(expr, var)) + " + C", None
+                    return integrate(expr, var) + " + C", None
                 
         elif t == "limit":
             expr = safe_parse(cmd.get("expression", ""))
             var = symbols(cmd.get("variable", "x"))
             point = safe_parse(str(cmd.get("point", 0)))
             if expr:
-                return str(limit(expr, var, point)), None
+                return limit(expr, var, point), None
                 
         elif t == "calculate":
             expr = safe_parse(cmd.get("expression", ""))
             if expr:
-                return str(expr.evalf()), None
+                return expr.evalf(), None
                 
         return None, f"نوع العملية {t} غير مدعوم"
         
@@ -184,33 +173,24 @@ def execute_math_command(cmd):
         traceback.print_exc()
         return None, str(e)
 
-# ============================================================
-# الحل المباشر لـ SymPy (للمسائل الواضحة)
-# ============================================================
+# ==================== الحل المباشر لـ SymPy ====================
 def solve_simple_math(question):
     try:
         q = question.replace(" ", "").replace("^", "**")
         print(f"🔍 معالجة: {q}")
         
         # ===== الحسابات البسيطة (أرقام فقط) =====
-        # التحقق من أن السؤال عبارة عن أرقام وعمليات فقط
         if all(c in '0123456789+-*/().' for c in q):
-            print("✅ تم التعرف على تعبير عددي")
-            
-            # الطريقة 1: استخدام eval الآمن للأرقام فقط
             try:
                 result = eval(q)
                 print(f"📊 eval: {q} = {result}")
-                return str(result)
-            except Exception as e:
-                print(f"⚠️ eval فشل: {e}")
-            
-            # الطريقة 2: استخدام SymPy
-            expr = safe_parse(q)
-            if expr:
-                result = expr.evalf()
-                print(f"📊 SymPy: {q} = {result}")
-                return str(result)
+                return f"الحل المباشر: {result}"
+            except:
+                expr = safe_parse(q)
+                if expr:
+                    result = expr.evalf()
+                    print(f"📊 SymPy: {q} = {result}")
+                    return f"الحل المباشر: {result}"
         
         # ===== المعادلات =====
         if '=' in q:
@@ -221,18 +201,22 @@ def solve_simple_math(question):
                 right = safe_parse(parts[1])
                 if left and right:
                     eq = Eq(left, right)
-                    solutions = solve(eq, x)
-                    return f"الحل: x = {solutions}"
-        
+                    vars_in_eq = list(left.free_symbols.union(right.free_symbols))
+                    if not vars_in_eq:
+                        return str(eq)
+                    solutions = solve(eq, vars_in_eq)
+                    # عرض طريقة الحل باستخدام pretty
+                    solution_str = ", ".join([f"{pretty(var)} = {pretty(val)}" for var, val in zip(vars_in_eq, solutions)]) if solutions else "لا يوجد حل"
+                    return f"الحل: {solution_str}"
+                else:
+                    print("⚠️ فشل parsing للمعادلة")
         return None
         
     except Exception as e:
         print(f"⚠️ خطأ في الحل المباشر: {e}")
         return None
 
-# ============================================================
-# مسار API
-# ============================================================
+# ==================== مسارات API ====================
 @app.route('/')
 def home():
     return render_template('index.html')
@@ -260,7 +244,7 @@ def solve_api():
             confidence=100
         )
 
-    # المستوى 2: OpenRouter لفهم السؤال
+    # المستوى 2: OpenRouter لفهم السؤال الكلامي
     if OPENROUTER_API_KEY:
         print("🔄 استخدام OpenRouter...")
         analysis = ask_openrouter(q)
@@ -270,10 +254,9 @@ def solve_api():
                 print(f"📦 JSON: {cmd_json}")
                 result, error = execute_math_command(cmd_json)
                 if result:
-                    print(f"✅ حل OpenRouter: {result}")
                     return jsonify(
                         success=True, 
-                        simple_answer=result, 
+                        simple_answer=f"الحل عبر OpenRouter: {result}", 
                         domain="رياضيات", 
                         confidence=95
                     )
@@ -288,9 +271,7 @@ def solve_api():
         confidence=0
     )
 
-# ============================================================
-# تشغيل التطبيق
-# ============================================================
+# ==================== تشغيل التطبيق ====================
 if __name__ == "__main__":
     print("\n" + "="*60)
     print("🚀 MathCore - SymPy + OpenRouter")
