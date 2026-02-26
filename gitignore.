@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# المفاتيح السرية
+.env
+*.env
+.keys
+*.key
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ملفات التشغيل المؤقتة
+run.bat
+run.sh
+start.sh
+
+# مجلدات التخزين
+static/uploads/
+static/cache/
+temp/
+
+# ملفات النظام
+Thumbs.db
+.DS_Store
