@@ -21,7 +21,6 @@ import json
 import re
 import traceback
 import hashlib
-from dotenv import load_dotenv
 
 # ============================================================
 # ⚠️ حماية من المدخلات الطويلة
@@ -53,7 +52,6 @@ except ImportError:
     HAS_GEMINI = False
     print("⚠️ مكتبة Gemini غير مثبتة. استخدم: pip install google-generativeai")
 
-load_dotenv()
 app = Flask(__name__)
 
 # ============================================================
@@ -149,30 +147,64 @@ SCHEMA = {
 }
 
 # ============================================================
-# 🔑 Gemini (مخطط)
+# 🔑 نظام المفاتيح من CMD فقط
 # ============================================================
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+
+# المفاتيح تأتي فقط من CMD - ممنوع نهائياً استخدام ملفات
+GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
+OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY')
+
+# التحقق من المفاتيح
 if GOOGLE_API_KEY and HAS_GEMINI:
     genai.configure(api_key=GOOGLE_API_KEY)
-    print("✅ Gemini: متصل (مخطط)")
+    print("✅ Gemini: متصل (من CMD)")
 else:
-    print("❌ Gemini: غير متصل")
+    print("❌ Gemini: غير متصل (set GOOGLE_API_KEY=... في CMD)")
 
-# ============================================================
-# 🔑 OpenRouter (بديل)
-# ============================================================
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 if OPENROUTER_API_KEY:
-    print("✅ OpenRouter: متصل")
+    print("✅ OpenRouter: متصل (من CMD)")
 else:
-    print("❌ OpenRouter: غير متصل")
+    print("❌ OpenRouter: غير متصل (set OPENROUTER_API_KEY=... في CMD)")
+
+def get_best_ai():
+    """تختار أفضل ذكاء متاح (كلها من CMD)"""
+    if GOOGLE_API_KEY and HAS_GEMINI:
+        return "gemini"
+    elif OPENROUTER_API_KEY:
+        return "openrouter"
+    else:
+        return None
 
 def ask_ai_parser(question):
-    """استخدام Gemini أو OpenRouter كمخطط"""
-    if GOOGLE_API_KEY and HAS_GEMINI:
+    """استخدام أفضل ذكاء متاح للمخطط"""
+    best_ai = get_best_ai()
+    
+    if best_ai == "gemini":
         return ask_gemini_parser(question)
-    elif OPENROUTER_API_KEY:
+    elif best_ai == "openrouter":
         return ask_openrouter_parser(question)
+    else:
+        print("❌ لا يوجد ذكاء متاح")
+        return None
+
+def get_explanation(question, result):
+    """شرح باستخدام أفضل ذكاء متاح"""
+    best_ai = get_best_ai()
+    
+    if best_ai == "gemini":
+        return get_gemini_explanation(question, result)
+    elif best_ai == "openrouter":
+        return get_openrouter_explanation(question, result)
+    return None
+
+def get_detailed_explanation(question, result):
+    """شرح تفصيلي باستخدام أفضل ذكاء"""
+    best_ai = get_best_ai()
+    
+    if best_ai == "gemini":
+        return get_gemini_detailed(question, result)
+    elif best_ai == "openrouter":
+        return get_openrouter_detailed(question, result)
     return None
 
 def ask_gemini_parser(question):
@@ -342,14 +374,6 @@ def get_valid_json(question, max_attempts=3):
     
     return None
 
-def get_explanation(question, result):
-    """شرح الحل بعد التنفيذ"""
-    if GOOGLE_API_KEY and HAS_GEMINI:
-        return get_gemini_explanation(question, result)
-    elif OPENROUTER_API_KEY:
-        return get_openrouter_explanation(question, result)
-    return None
-
 def get_gemini_explanation(question, result):
     """شرح باستخدام Gemini"""
     prompt = f"""اشرح هذا الحل بلغة تعليمية مبسطة:
@@ -397,18 +421,6 @@ def get_openrouter_explanation(question, result):
             return response.json()['choices'][0]['message']['content']
     except:
         pass
-    return None
-
-# ============================================================
-# 📚 شرح تفصيلي خطوة بخطوة
-# ============================================================
-
-def get_detailed_explanation(question, result):
-    """شرح تفصيلي مع صيغ LaTeX"""
-    if GOOGLE_API_KEY and HAS_GEMINI:
-        return get_gemini_detailed(question, result)
-    elif OPENROUTER_API_KEY:
-        return get_openrouter_detailed(question, result)
     return None
 
 def get_gemini_detailed(question, result):
@@ -730,14 +742,14 @@ if __name__ == '__main__':
     print("\n" + "="*70)
     print("🔥 MathCore - النسخة الكاملة بكل الميزات 🔥")
     print("="*70)
-    print("✅ Gemini + OpenRouter (دعم مزدوج)")
+    print("✅ Gemini + OpenRouter (من CMD فقط)")
     print("✅ JSON Schema صارم + Validation")
     print("✅ شرح عادي + شرح تفصيلي مع LaTeX")
     print("✅ Matrix, Stats, ODE, Limit, Solve, Diff, Integrate")
     print("✅ Self-healing (3 محاولات)")
     print("="*70)
-    print(f"🔑 Gemini: {'✅ متصل' if GOOGLE_API_KEY and HAS_GEMINI else '❌ غير متصل'}")
-    print(f"🔑 OpenRouter: {'✅ متصل' if OPENROUTER_API_KEY else '❌ غير متصل'}")
+    print(f"🔑 Gemini: {'✅ متصل (من CMD)' if GOOGLE_API_KEY and HAS_GEMINI else '❌ غير متصل (set GOOGLE_API_KEY=...)'}")
+    print(f"🔑 OpenRouter: {'✅ متصل (من CMD)' if OPENROUTER_API_KEY else '❌ غير متصل (set OPENROUTER_API_KEY=...)'}")
     print("🌐 http://127.0.0.1:5000")
     print("="*70 + "\n")
     
