@@ -29,6 +29,14 @@ except ImportError:
     HAS_JSON5 = False
     print("⚠️ json5 غير مثبت. استخدم: pip install json5")
 
+# محاولة استيراد Gemini
+try:
+    import google.generativeai as genai
+    HAS_GEMINI = True
+except ImportError:
+    HAS_GEMINI = False
+    print("⚠️ مكتبة Gemini غير مثبتة. استخدم: pip install google-generativeai")
+
 load_dotenv()
 app = Flask(__name__)
 
@@ -79,9 +87,52 @@ def safe_parse(expr_str):
         return None
 
 # ============================================================
+# 🔑 Gemini
+# ============================================================
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+if GOOGLE_API_KEY and HAS_GEMINI:
+    genai.configure(api_key=GOOGLE_API_KEY)
+    print("✅ Gemini: متصل")
+else:
+    print("❌ Gemini: غير متصل")
+
+def ask_gemini(question):
+    """إرسال السؤال لـ Gemini"""
+    if not GOOGLE_API_KEY or not HAS_GEMINI:
+        return None
+    
+    prompt = f"""أنت محلل رياضي خبير. مهمتك تحويل أي سؤال رياضي إلى JSON دقيق.
+
+السؤال: {question}
+
+أنواع العمليات:
+1. solve - حل المعادلات: {{"type": "solve", "expression": "...", "variable": "x"}}
+2. diff - تفاضل: {{"type": "diff", "expression": "...", "variable": "x", "order": 1}}
+3. integrate - تكامل: {{"type": "integrate", "expression": "...", "variable": "x"}}
+4. limit - نهايات: {{"type": "limit", "expression": "...", "variable": "x", "point": 0}}
+5. matrix - مصفوفات: {{"type": "matrix", "expression": "[[1,2],[3,4]]", "operation": "det"}}
+
+أعد JSON فقط."""
+    
+    try:
+        print("📡 جاري الاتصال بـ Gemini...")
+        model = genai.GenerativeModel('gemini-pro')
+        response = model.generate_content(prompt)
+        result = response.text
+        print(f"🔧 استجابة: {result[:200]}...")
+        return result
+    except Exception as e:
+        print(f"🔥 خطأ Gemini: {e}")
+        return None
+
+# ============================================================
 # 🔑 OpenRouter
 # ============================================================
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+if OPENROUTER_API_KEY:
+    print("✅ OpenRouter: متصل")
+else:
+    print("❌ OpenRouter: غير متصل")
 
 def ask_openrouter(question):
     if not OPENROUTER_API_KEY:
@@ -237,7 +288,7 @@ def execute_math_command(cmd):
 # ============================================================
 
 def solve_simple_math(question):
-    """حل المسائل البسيطة مباشرة - المعقدة تذهب لـ OpenRouter"""
+    """حل المسائل البسيطة مباشرة - المعقدة تذهب للذكاء"""
     try:
         q = question.replace(" ", "").replace("^", "**")
         original_q = question
@@ -256,7 +307,7 @@ def solve_simple_math(question):
         
         for pattern in complex_patterns:
             if re.search(pattern, q):
-                print(f"🔄 مسألة معقدة: تذهب لـ OpenRouter")
+                print(f"🔄 مسألة معقدة: تذهب للذكاء")
                 return None
         
         # ===== 1. حالة = في النهاية =====
@@ -356,34 +407,48 @@ def solve_api():
             confidence=100
         )
     
-    # المستوى 2: OpenRouter للمسائل المعقدة
-    if OPENROUTER_API_KEY:
+    # المستوى 2: استخدام الذكاء للمسائل المعقدة
+    result = None
+    error = None
+    explanation = None
+    
+    # الأولوية لـ Gemini
+    if GOOGLE_API_KEY and HAS_GEMINI:
+        print("🔄 استخدام Gemini...")
+        analysis = ask_gemini(question)
+        
+        if analysis:
+            cmd_json = extract_json_advanced(analysis)
+            if cmd_json:
+                print(f"📦 JSON: {cmd_json}")
+                result, error = execute_math_command(cmd_json)
+        
+    # إذا فشل Gemini، جرب OpenRouter
+    if not result and OPENROUTER_API_KEY:
         print("🔄 استخدام OpenRouter...")
         analysis = ask_openrouter(question)
         
         if analysis:
             cmd_json = extract_json_advanced(analysis)
-            
             if cmd_json:
                 print(f"📦 JSON: {cmd_json}")
                 result, error = execute_math_command(cmd_json)
-                
-                if result:
-                    print(f"✅ النتيجة: {result}")
-                    
-                    # شرح إذا طلب
-                    explanation = None
-                    if 'شرح' in question.lower():
-                        exp = ask_openrouter(f"اشرح حل: {question}\nالنتيجة: {result}")
-                        explanation = exp
-                    
-                    return jsonify(
-                        success=True,
-                        simple_answer=result,
-                        explanation=explanation,
-                        domain="رياضيات",
-                        confidence=95
-                    )
+    
+    if result:
+        # شرح إذا طلب
+        if 'شرح' in question.lower():
+            if GOOGLE_API_KEY and HAS_GEMINI:
+                explanation = ask_gemini(f"اشرح حل: {question}\nالنتيجة: {result}")
+            elif OPENROUTER_API_KEY:
+                explanation = ask_openrouter(f"اشرح حل: {question}\nالنتيجة: {result}")
+        
+        return jsonify(
+            success=True,
+            simple_answer=result,
+            explanation=explanation,
+            domain="رياضيات",
+            confidence=95
+        )
     
     # رسالة مساعدة
     return jsonify(
@@ -399,11 +464,12 @@ def solve_api():
 
 if __name__ == '__main__':
     print("\n" + "="*70)
-    print("🔥 MathCore - النسخة النهائية 🔥")
+    print("🔥 MathCore - يدعم Gemini و OpenRouter 🔥")
     print("="*70)
     print("✅ المسائل البسيطة: حل مباشر")
-    print("✅ المسائل المعقدة: OpenRouter → SymPy → شرح")
+    print("✅ المسائل المعقدة: Gemini أو OpenRouter → SymPy → شرح")
     print("="*70)
+    print(f"🔑 Gemini: {'✅ متصل' if GOOGLE_API_KEY and HAS_GEMINI else '❌ غير متصل'}")
     print(f"🔑 OpenRouter: {'✅ متصل' if OPENROUTER_API_KEY else '❌ غير متصل'}")
     print("🌐 http://127.0.0.1:5000")
     print("="*70 + "\n")
