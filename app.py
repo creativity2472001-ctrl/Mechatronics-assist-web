@@ -10,7 +10,7 @@ from sympy import (
     simplify, expand, factor, collect, apart, together,
     latex, pretty, solve_poly_system
 )
-from sympy.stats import Normal, Binomial, Poisson, mean, variance, std
+from sympy.stats import Normal, Binomial, Poisson, variance, std
 from sympy.parsing.sympy_parser import (
     parse_expr, standard_transformations, 
     implicit_multiplication, convert_xor
@@ -22,6 +22,10 @@ import re
 import traceback
 import random
 from dotenv import load_dotenv
+
+# تعريف دالة المتوسط الحسابي يدوياً
+def mean(data):
+    return sum(data) / len(data)
 
 # محاولة استيراد json5
 try:
@@ -318,13 +322,13 @@ def execute_math_command(cmd):
             data = cmd.get("data", [])
             
             if op == "mean":
-                return str(sum(data) / len(data)), None
+                return str(mean(data)), None
             elif op == "variance":
-                m = sum(data) / len(data)
+                m = mean(data)
                 var = sum((xi - m) ** 2 for xi in data) / (len(data) - 1)
                 return str(var), None
             elif op == "std":
-                m = sum(data) / len(data)
+                m = mean(data)
                 var = sum((xi - m) ** 2 for xi in data) / (len(data) - 1)
                 return str(var ** 0.5), None
         
