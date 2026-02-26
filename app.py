@@ -15,10 +15,12 @@ from sympy.parsing.sympy_parser import (
     parse_expr, standard_transformations, 
     implicit_multiplication, convert_xor
 )
+import requests
 import os
 import json
 import re
 import traceback
+import hashlib
 from dotenv import load_dotenv
 
 # ============================================================
@@ -114,7 +116,6 @@ def safe_parse(expr_str):
 def simplify_result(expr):
     """تبسيط النتيجة الرياضية بشكل آمن"""
     try:
-        # إذا كان التعبير نصيًا، نحوله أولاً
         if isinstance(expr, str):
             expr = safe_parse(expr)
         if expr is None:
@@ -124,14 +125,14 @@ def simplify_result(expr):
         return str(expr)
 
 # ============================================================
-# 🔑 مخطط JSON الصارم (مع point)
+# 🔑 مخطط JSON الصارم (كامل)
 # ============================================================
 SCHEMA = {
     "intent": "solve | diff | integrate | limit | matrix | stats | ode | mcq",
     "expression": "string | null",
     "variable": "string | null",
     "order": "int | null",
-    "point": "string | null",  # ✅ للنهايات
+    "point": "string | null",
     "limits": {
         "lower": "string | null",
         "upper": "string | null"
@@ -148,17 +149,34 @@ SCHEMA = {
 }
 
 # ============================================================
-# 🔑 Gemini (المخطط فقط - محسّن)
+# 🔑 Gemini (مخطط)
 # ============================================================
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if GOOGLE_API_KEY and HAS_GEMINI:
     genai.configure(api_key=GOOGLE_API_KEY)
-    print("✅ Gemini: متصل (وضع المخطط فقط)")
+    print("✅ Gemini: متصل (مخطط)")
 else:
     print("❌ Gemini: غير متصل")
 
+# ============================================================
+# 🔑 OpenRouter (بديل)
+# ============================================================
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+if OPENROUTER_API_KEY:
+    print("✅ OpenRouter: متصل")
+else:
+    print("❌ OpenRouter: غير متصل")
+
+def ask_ai_parser(question):
+    """استخدام Gemini أو OpenRouter كمخطط"""
+    if GOOGLE_API_KEY and HAS_GEMINI:
+        return ask_gemini_parser(question)
+    elif OPENROUTER_API_KEY:
+        return ask_openrouter_parser(question)
+    return None
+
 def ask_gemini_parser(question):
-    """Gemini كمخطط فقط - يحول السؤال إلى JSON"""
+    """Gemini كمخطط"""
     if not GOOGLE_API_KEY or not HAS_GEMINI:
         return None
     
@@ -191,6 +209,65 @@ def ask_gemini_parser(question):
         return result
     except Exception as e:
         print(f"🔥 خطأ Gemini: {e}")
+        return None
+
+def ask_openrouter_parser(question):
+    """OpenRouter كمخطط"""
+    if not OPENROUTER_API_KEY:
+        return None
+    
+    prompt = f"""أنت محلل رياضي آلي.
+مهمتك الوحيدة: تحويل السؤال إلى JSON صالح للتنفيذ في SymPy.
+
+قواعد صارمة:
+- لا تحل المسألة
+- لا تشرح
+- لا تحسب
+- لا تضف أي نص خارج JSON
+- استخدم المتغير x افتراضيًا
+- كل القيم تكون Strings قابلة لـ parse_expr
+
+المخطط المسموح به فقط:
+{json.dumps(SCHEMA, indent=2, ensure_ascii=False)}
+
+السؤال: {question}
+
+أعد JSON فقط."""
+    
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    data = {
+        "model": "deepseek/deepseek-chat",
+        "messages": [
+            {"role": "system", "content": "أنت محلل رياضي. أعد JSON فقط."},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0,
+        "max_tokens": 1000
+    }
+    
+    try:
+        print("📡 جاري الاتصال بـ OpenRouter...")
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            json=data,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            result = response.json()['choices'][0]['message']['content']
+            print(f"🔧 استجابة OpenRouter: {result[:200]}...")
+            return result
+        else:
+            print(f"❌ خطأ OpenRouter: {response.status_code}")
+            return None
+            
+    except Exception as e:
+        print(f"🔥 خطأ: {e}")
         return None
 
 def extract_json_advanced(text):
@@ -230,7 +307,6 @@ def validate_json(cmd):
     if cmd["intent"] not in valid_intents:
         return False, f"intent غير معروف: {cmd['intent']}"
     
-    # ✅ التحقق الخاص بـ limit
     if cmd["intent"] == "limit":
         if "point" not in cmd:
             return False, "limit يحتاج point"
@@ -247,7 +323,7 @@ def get_valid_json(question, max_attempts=3):
     """محاولة الحصول على JSON صالح"""
     for attempt in range(max_attempts):
         print(f"🔄 محاولة {attempt+1}/{max_attempts}")
-        raw = ask_gemini_parser(question)
+        raw = ask_ai_parser(question)
         
         if not raw:
             continue
@@ -268,9 +344,14 @@ def get_valid_json(question, max_attempts=3):
 
 def get_explanation(question, result):
     """شرح الحل بعد التنفيذ"""
-    if not GOOGLE_API_KEY or not HAS_GEMINI:
-        return None
-    
+    if GOOGLE_API_KEY and HAS_GEMINI:
+        return get_gemini_explanation(question, result)
+    elif OPENROUTER_API_KEY:
+        return get_openrouter_explanation(question, result)
+    return None
+
+def get_gemini_explanation(question, result):
+    """شرح باستخدام Gemini"""
     prompt = f"""اشرح هذا الحل بلغة تعليمية مبسطة:
 
 السؤال: {question}
@@ -287,8 +368,129 @@ def get_explanation(question, result):
         print(f"🔥 خطأ في الشرح: {e}")
         return None
 
+def get_openrouter_explanation(question, result):
+    """شرح باستخدام OpenRouter"""
+    prompt = f"""اشرح هذا الحل بلغة تعليمية مبسطة:
+
+السؤال: {question}
+الحل: {result}"""
+    
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    data = {
+        "model": "deepseek/deepseek-chat",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.3
+    }
+    
+    try:
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            json=data,
+            timeout=30
+        )
+        if response.status_code == 200:
+            return response.json()['choices'][0]['message']['content']
+    except:
+        pass
+    return None
+
 # ============================================================
-# 🚀 تنفيذ العمليات الرياضية (SymPy فقط)
+# 📚 شرح تفصيلي خطوة بخطوة
+# ============================================================
+
+def get_detailed_explanation(question, result):
+    """شرح تفصيلي مع صيغ LaTeX"""
+    if GOOGLE_API_KEY and HAS_GEMINI:
+        return get_gemini_detailed(question, result)
+    elif OPENROUTER_API_KEY:
+        return get_openrouter_detailed(question, result)
+    return None
+
+def get_gemini_detailed(question, result):
+    """شرح تفصيلي باستخدام Gemini"""
+    prompt = f"""
+    أنت مدرس رياضيات خبير. اشرح هذا الحل خطوة بخطوة بطريقة تعليمية مفصلة.
+    
+    السؤال: {question}
+    النتيجة: {result}
+    
+    اكتب الشرح بالتنسيق التالي بالضبط:
+    
+    📝 **المعطيات:**
+    - نريد حساب: [أعد صياغة السؤال]
+    
+    🔍 **الخطوة ١: [اسم الخطوة الأولى]**
+    [شرح مفصل مع الصيغ الرياضية]
+    
+    🔍 **الخطوة ٢: [اسم الخطوة الثانية]**
+    [شرح مفصل مع الصيغ الرياضية]
+    
+    🔍 **الخطوة ٣: [اسم الخطوة الثالثة]**
+    [شرح مفصل مع الصيغ الرياضية]
+    
+    ✅ **النتيجة النهائية:**
+    \[
+    \boxed{النتيجة}
+    \]
+    
+    قواعد مهمة:
+    - استخدم \[ \] للمعادلات المنفصلة
+    - استخدم \( \) للمعادلات داخل النص
+    - كل خطوة要有 رقم وتفسير واضح
+    - اكتب بالعربية الفصحى
+    """
+    
+    try:
+        print("📚 جاري إنشاء شرح تفصيلي...")
+        model = genai.GenerativeModel('models/gemini-3-flash-preview')
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        print(f"🔥 خطأ في الشرح التفصيلي: {e}")
+        return None
+
+def get_openrouter_detailed(question, result):
+    """شرح تفصيلي باستخدام OpenRouter"""
+    prompt = f"""
+    أنت مدرس رياضيات خبير. اشرح هذا الحل خطوة بخطوة:
+    
+    السؤال: {question}
+    الحل: {result}
+    
+    اكتب شرحاً مفصلاً مع الخطوات.
+    """
+    
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    data = {
+        "model": "deepseek/deepseek-chat",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.3
+    }
+    
+    try:
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            json=data,
+            timeout=30
+        )
+        if response.status_code == 200:
+            return response.json()['choices'][0]['message']['content']
+    except:
+        pass
+    return None
+
+# ============================================================
+# 🚀 تنفيذ العمليات الرياضية
 # ============================================================
 
 def execute_math_command(cmd):
@@ -395,7 +597,7 @@ def execute_math_command(cmd):
         return None, str(e)
 
 # ============================================================
-# 📝 المسائل البسيطة (بدون Gemini)
+# 📝 المسائل البسيطة
 # ============================================================
 
 def solve_simple_math(question):
@@ -465,7 +667,7 @@ def solve_api():
     if not question:
         return jsonify(success=False, simple_answer="❌ السؤال فارغ")
     
-    # المستوى 1: حل مباشر (للمسائل البسيطة)
+    # المستوى 1: حل مباشر
     direct_result = solve_simple_math(question)
     if direct_result:
         print(f"✅ حل مباشر: {direct_result}")
@@ -475,17 +677,17 @@ def solve_api():
             steps=["تم الحل مباشرة باستخدام SymPy"]
         )
     
-    # المستوى 2: استخدام Gemini كمخطط فقط
-    if GOOGLE_API_KEY and HAS_GEMINI:
+    # المستوى 2: استخدام الذكاء
+    if GOOGLE_API_KEY or OPENROUTER_API_KEY:
         wants_explanation = any(word in question.lower() for word in ['شرح', 'خطوات', 'how', 'steps'])
+        wants_detailed = any(word in question.lower() for word in ['تفصيلي', 'مفصل', 'detailed'])
         
         cmd = get_valid_json(question)
         
         if cmd:
             print(f"📦 JSON المستخرج: {json.dumps(cmd, ensure_ascii=False)}")
             
-            # إضافة طلب الشرح إلى الأمر
-            if wants_explanation:
+            if wants_explanation or wants_detailed:
                 cmd["explain"] = True
             
             result, error = execute_math_command(cmd)
@@ -496,11 +698,16 @@ def solve_api():
                 response = {
                     "success": True,
                     "simple_answer": result,
-                    "steps": ["تم الحل باستخدام SymPy"]
+                    "steps": ["تم الحل باستخدام الذكاء"]
                 }
                 
-                # شرح إذا طلب
-                if wants_explanation:
+                if wants_detailed:
+                    detailed = get_detailed_explanation(question, result)
+                    if detailed:
+                        response["detailed_explanation"] = detailed
+                        response["steps"] = ["شرح تفصيلي خطوة بخطوة"]
+                
+                elif wants_explanation:
                     explanation = get_explanation(question, result)
                     if explanation:
                         response["explanation"] = explanation
@@ -509,7 +716,6 @@ def solve_api():
             else:
                 print(f"❌ فشل التنفيذ: {error}")
     
-    # رسالة مساعدة
     return jsonify(
         success=True,
         simple_answer="❓ لم أتمكن من حل السؤال",
@@ -522,15 +728,16 @@ def solve_api():
 
 if __name__ == '__main__':
     print("\n" + "="*70)
-    print("🔥 MathCore - التصميم المعماري الصحيح (محسّن نهائي) 🔥")
+    print("🔥 MathCore - النسخة الكاملة بكل الميزات 🔥")
     print("="*70)
-    print("✅ Gemini = مخطط فقط (مع point في schema)")
-    print("✅ safe_parse محسّن + حماية DoS")
-    print("✅ mean آمن (يتحقق من البيانات)")
-    print("✅ simplify_result يدخل strings")
-    print("✅ Validation شامل للنهايات")
+    print("✅ Gemini + OpenRouter (دعم مزدوج)")
+    print("✅ JSON Schema صارم + Validation")
+    print("✅ شرح عادي + شرح تفصيلي مع LaTeX")
+    print("✅ Matrix, Stats, ODE, Limit, Solve, Diff, Integrate")
+    print("✅ Self-healing (3 محاولات)")
     print("="*70)
-    print(f"🔑 Gemini: {'✅ متصل (مخطط)' if GOOGLE_API_KEY and HAS_GEMINI else '❌ غير متصل'}")
+    print(f"🔑 Gemini: {'✅ متصل' if GOOGLE_API_KEY and HAS_GEMINI else '❌ غير متصل'}")
+    print(f"🔑 OpenRouter: {'✅ متصل' if OPENROUTER_API_KEY else '❌ غير متصل'}")
     print("🌐 http://127.0.0.1:5000")
     print("="*70 + "\n")
     
