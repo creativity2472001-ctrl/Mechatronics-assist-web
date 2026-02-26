@@ -116,7 +116,8 @@ def ask_gemini(question):
     
     try:
         print("📡 جاري الاتصال بـ Gemini...")
-        model = genai.GenerativeModel('gemini-pro')
+        # ✅ استخدام الموديل الصحيح من القائمة
+        model = genai.GenerativeModel('models/gemini-3-flash-preview')
         response = model.generate_content(prompt)
         result = response.text
         print(f"🔧 استجابة: {result[:200]}...")
