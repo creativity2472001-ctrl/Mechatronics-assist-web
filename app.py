@@ -8,9 +8,9 @@ from sympy import (
     exp, log, sqrt, root, ln,
     pi, E, I, oo,
     simplify, expand, factor, collect, apart, together,
-    latex, pretty, solve_poly_system,
-    stats, Normal, Binomial, Poisson, mean, variance, std
+    latex, pretty, solve_poly_system
 )
+from sympy.stats import Normal, Binomial, Poisson, mean, variance, std
 from sympy.parsing.sympy_parser import (
     parse_expr, standard_transformations, 
     implicit_multiplication, convert_xor
