@@ -5,10 +5,11 @@ from sympy import (
     sin, cos, tan, cot, sec, csc,
     asin, acos, atan, acot, asec, acsc,
     sinh, cosh, tanh, asinh, acosh, atanh,
-    exp, log, sqrt, root,
+    exp, log, sqrt, root, ln,
     pi, E, I, oo,
     simplify, expand, factor, collect, apart, together,
-    latex, pretty
+    latex, pretty, solve_poly_system,
+    stats, Normal, Binomial, Poisson, mean, variance, std
 )
 from sympy.parsing.sympy_parser import (
     parse_expr, standard_transformations, 
@@ -19,6 +20,7 @@ import os
 import json
 import re
 import traceback
+import random
 from dotenv import load_dotenv
 
 # محاولة استيراد json5
@@ -46,16 +48,20 @@ app = Flask(__name__)
 x, y, z, t, n = symbols('x y z t n')
 f, g = symbols('f g', cls=Function)
 
+# دوال إحصائية
+NormalDist = Normal
+BinomialDist = Binomial
+PoissonDist = Poisson
+
 SYMPY_FUNCTIONS = {
     "x": x, "y": y, "z": z, "t": t, "n": n,
     "f": f, "g": g,
     "sin": sin, "cos": cos, "tan": tan, "cot": cot,
     "sec": sec, "csc": csc,
-    "asin": asin, "acos": acos, "atan": atan,
-    "acot": acot, "asec": asec, "acsc": acsc,
+    "asin": asin, "acos": acos, "atan": atan, "acot": acot, "asec": asec, "acsc": acsc,
     "sinh": sinh, "cosh": cosh, "tanh": tanh,
     "asinh": asinh, "acosh": acosh, "atanh": atanh,
-    "exp": exp, "log": log, "ln": log,
+    "exp": exp, "log": log, "ln": ln,
     "sqrt": sqrt, "root": root,
     "pi": pi, "E": E, "I": I, "oo": oo,
     "Eq": Eq, "Derivative": Derivative,
@@ -66,7 +72,10 @@ SYMPY_FUNCTIONS = {
     "apart": apart, "together": together,
     "solve": solve, "diff": diff, "integrate": integrate,
     "limit": limit, "summation": summation, "product": product,
-    "dsolve": dsolve
+    "dsolve": dsolve,
+    # إحصائيات
+    "Normal": Normal, "Binom": Binomial, "Poisson": Poisson,
+    "mean": mean, "variance": variance, "std": std
 }
 
 transformations = (
@@ -86,6 +95,17 @@ def safe_parse(expr_str):
         print(f"❌ خطأ في التحليل: {e}")
         return None
 
+def simplify_result(expr):
+    """تبسيط النتيجة الرياضية"""
+    try:
+        if isinstance(expr, str):
+            expr_obj = safe_parse(expr)
+            if expr_obj:
+                return str(simplify(expr_obj))
+        return str(simplify(expr))
+    except:
+        return str(expr)
+
 # ============================================================
 # 🔑 Gemini
 # ============================================================
@@ -97,7 +117,6 @@ else:
     print("❌ Gemini: غير متصل")
 
 def ask_gemini(question):
-    """إرسال السؤال لـ Gemini"""
     if not GOOGLE_API_KEY or not HAS_GEMINI:
         return None
     
@@ -106,17 +125,21 @@ def ask_gemini(question):
 السؤال: {question}
 
 أنواع العمليات:
-1. solve - حل المعادلات: {{"type": "solve", "expression": "...", "variable": "x"}}
-2. diff - تفاضل: {{"type": "diff", "expression": "...", "variable": "x", "order": 1}}
-3. integrate - تكامل: {{"type": "integrate", "expression": "...", "variable": "x"}}
-4. limit - نهايات: {{"type": "limit", "expression": "...", "variable": "x", "point": 0}}
-5. matrix - مصفوفات: {{"type": "matrix", "expression": "[[1,2],[3,4]]", "operation": "det"}}
+1. solve - حل المعادلات
+2. diff - تفاضل
+3. integrate - تكامل
+4. limit - نهايات
+5. matrix - مصفوفات
+6. stats - إحصاء (متوسط، انحراف، توزيع طبيعي)
+7. log - لوغاريتمات متقدمة
+8. trig_inv - دوال مثلثية عكسية
+9. ode - معادلات تفاضلية
+10. mcq - اختيار من متعدد
 
 أعد JSON فقط."""
     
     try:
         print("📡 جاري الاتصال بـ Gemini...")
-        # ✅ استخدام الموديل الصحيح من القائمة
         model = genai.GenerativeModel('models/gemini-3-flash-preview')
         response = model.generate_content(prompt)
         result = response.text
@@ -126,66 +149,39 @@ def ask_gemini(question):
         print(f"🔥 خطأ Gemini: {e}")
         return None
 
-# ============================================================
-# 🔑 OpenRouter
-# ============================================================
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-if OPENROUTER_API_KEY:
-    print("✅ OpenRouter: متصل")
-else:
-    print("❌ OpenRouter: غير متصل")
-
-def ask_openrouter(question):
-    if not OPENROUTER_API_KEY:
+def ask_gemini_with_steps(question):
+    """إرسال السؤال لـ Gemini مع طلب الخطوات والشرح"""
+    if not GOOGLE_API_KEY or not HAS_GEMINI:
         return None
     
-    prompt = f"""أنت محلل رياضي خبير. مهمتك تحويل أي سؤال رياضي إلى JSON دقيق.
+    prompt = f"""أنت مدرس رياضيات خبير. مهمتك:
+1. حل السؤال خطوة بخطوة
+2. اكتب كل خطوة بوضوح
+3. قدم النتيجة النهائية مبسطة
 
 السؤال: {question}
 
-أنواع العمليات:
-1. solve - حل المعادلات: {{"type": "solve", "expression": "...", "variable": "x"}}
-2. diff - تفاضل: {{"type": "diff", "expression": "...", "variable": "x", "order": 1}}
-3. integrate - تكامل: {{"type": "integrate", "expression": "...", "variable": "x"}}
-4. limit - نهايات: {{"type": "limit", "expression": "...", "variable": "x", "point": 0}}
-5. matrix - مصفوفات: {{"type": "matrix", "expression": "[[1,2],[3,4]]", "operation": "det"}}
+أعد الإجابة بصيغة JSON:
+{{
+  "steps": ["خطوة 1: ...", "خطوة 2: ..."],
+  "result": "النتيجة النهائية المبسطة",
+  "explanation": "شرح عام للحل"
+}}
 
 أعد JSON فقط."""
     
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    
-    data = {
-        "model": "deepseek/deepseek-chat",
-        "messages": [
-            {"role": "system", "content": "أعد JSON فقط."},
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 0,
-        "max_tokens": 1000
-    }
-    
     try:
-        print("📡 جاري الاتصال بـ OpenRouter...")
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers,
-            json=data,
-            timeout=30
-        )
+        print("📡 جاري الاتصال بـ Gemini...")
+        model = genai.GenerativeModel('models/gemini-3-flash-preview')
+        response = model.generate_content(prompt)
+        result = response.text
         
-        if response.status_code == 200:
-            result = response.json()['choices'][0]['message']['content']
-            print(f"🔧 استجابة: {result[:200]}...")
-            return result
-        else:
-            print(f"❌ خطأ OpenRouter: {response.status_code}")
-            return None
-            
+        json_match = re.search(r'\{.*\}', result, re.DOTALL)
+        if json_match:
+            return json_match.group()
+        return None
     except Exception as e:
-        print(f"🔥 خطأ: {e}")
+        print(f"🔥 خطأ Gemini: {e}")
         return None
 
 def extract_json_advanced(text):
@@ -212,7 +208,7 @@ def extract_json_advanced(text):
     return None
 
 # ============================================================
-# 🚀 تنفيذ العمليات الرياضية
+# 🚀 تنفيذ العمليات الرياضية الموسعة
 # ============================================================
 
 def execute_math_command(cmd):
@@ -226,7 +222,7 @@ def execute_math_command(cmd):
             var = symbols(var_name)
             if expr:
                 solutions = solve(expr, var)
-                return str(solutions), None
+                return simplify_result(solutions), None
         
         elif cmd_type == "diff":
             expr = safe_parse(cmd.get("expression", ""))
@@ -235,7 +231,7 @@ def execute_math_command(cmd):
             order = cmd.get("order", 1)
             if expr:
                 result = diff(expr, var, order)
-                return str(result), None
+                return simplify_result(result), None
         
         elif cmd_type == "integrate":
             expr = safe_parse(cmd.get("expression", ""))
@@ -247,10 +243,9 @@ def execute_math_command(cmd):
                     lower = safe_parse(str(cmd["lower"]))
                     upper = safe_parse(str(cmd["upper"]))
                     result = integrate(expr, (var, lower, upper))
-                    return str(result), None
                 else:
                     result = integrate(expr, var)
-                    return str(result) + " + C", None
+                return simplify_result(result) + (" + C" if "upper" not in cmd else ""), None
         
         elif cmd_type == "limit":
             expr = safe_parse(cmd.get("expression", ""))
@@ -259,7 +254,7 @@ def execute_math_command(cmd):
             point = safe_parse(str(cmd.get("point", 0)))
             if expr:
                 result = limit(expr, var, point)
-                return str(result), None
+                return simplify_result(result), None
         
         elif cmd_type == "matrix":
             expr_str = cmd.get("expression", "")
@@ -273,10 +268,76 @@ def execute_math_command(cmd):
                     return str(M.det()), None
                 elif operation == "inv":
                     return str(M.inv()), None
+                elif operation == "transpose":
+                    return str(M.T), None
                 else:
                     return str(M), None
             except:
                 return None, "خطأ في المصفوفة"
+        
+        # ===== دوال مثلثية عكسية =====
+        elif cmd_type == "trig_inv":
+            expr = safe_parse(cmd.get("expression", ""))
+            func = cmd.get("function", "asin")
+            if expr:
+                if func == "asin":
+                    return str(asin(expr)), None
+                elif func == "acos":
+                    return str(acos(expr)), None
+                elif func == "atan":
+                    return str(atan(expr)), None
+                return str(expr), None
+        
+        # ===== لوغاريتمات =====
+        elif cmd_type == "log":
+            expr = safe_parse(cmd.get("expression", ""))
+            base = cmd.get("base", E)
+            if base == E:
+                return str(ln(expr)), None
+            else:
+                base_expr = safe_parse(str(base))
+                return str(log(expr, base_expr)), None
+        
+        # ===== معادلات تفاضلية =====
+        elif cmd_type == "ode":
+            eq_str = cmd.get("equation", "")
+            func_name = cmd.get("function", "f")
+            var_name = cmd.get("variable", "x")
+            
+            var = symbols(var_name)
+            f_func = Function(func_name)
+            
+            eq = safe_parse(eq_str.replace(func_name, func_name))
+            if eq:
+                result = dsolve(eq, f_func(var))
+                return str(result), None
+        
+        # ===== إحصاء =====
+        elif cmd_type == "stats":
+            op = cmd.get("operation", "mean")
+            data = cmd.get("data", [])
+            
+            if op == "mean":
+                return str(sum(data) / len(data)), None
+            elif op == "variance":
+                m = sum(data) / len(data)
+                var = sum((xi - m) ** 2 for xi in data) / (len(data) - 1)
+                return str(var), None
+            elif op == "std":
+                m = sum(data) / len(data)
+                var = sum((xi - m) ** 2 for xi in data) / (len(data) - 1)
+                return str(var ** 0.5), None
+        
+        # ===== اختيار من متعدد =====
+        elif cmd_type == "mcq":
+            options = cmd.get("options", [])
+            correct = cmd.get("correct", 0)
+            
+            # تحليل الخيارات
+            result = f"الإجابة الصحيحة: {options[correct]}"
+            if len(options) > 1:
+                result += f"\nالخيارات: {', '.join(options)}"
+            return result, None
         
         return None, f"نوع العملية {cmd_type} غير مدعوم"
         
@@ -285,25 +346,23 @@ def execute_math_command(cmd):
         return None, str(e)
 
 # ============================================================
-# 📝 المسائل البسيطة - مع كشف المسائل المعقدة
+# 📝 المسائل البسيطة
 # ============================================================
 
 def solve_simple_math(question):
-    """حل المسائل البسيطة مباشرة - المعقدة تذهب للذكاء"""
+    """حل المسائل البسيطة مباشرة"""
     try:
         q = question.replace(" ", "").replace("^", "**")
         original_q = question
         
-        # ===== كشف المسائل المعقدة =====
+        # كشف المسائل المعقدة
         complex_patterns = [
-            r'sin\(\d+',      # sin(60...)
-            r'cos\(\d+',      # cos(5...)
-            r'tan\(\d+',      # tan(2...)
-            r'\d+\s*\*?\s*x', # 2x, 5x
-            r'x\^\d+\s*[\+\-\*\/]', # x^2 +, x^3 -
-            r'∫|نهاية|مصفوفة|det|inv', # كلمات مفتاحية
-            r'from.*to|من.*إلى', # تكامل محدد
-            r'lim|نها', # نهايات
+            r'sin\(\d+', r'cos\(\d+', r'tan\(\d+',
+            r'\d+\s*\*?\s*x', r'x\^\d+\s*[\+\-\*\/]',
+            r'∫|نهاية|مصفوفة|det|inv|log|ln|asin|acos|atan',
+            r'from.*to|من.*إلى', r'lim|نها',
+            r'متوسط|انحراف|توزيع|طبيعي',
+            r'اختيار|من متعدد|أ\)|ب\)',
         ]
         
         for pattern in complex_patterns:
@@ -311,11 +370,7 @@ def solve_simple_math(question):
                 print(f"🔄 مسألة معقدة: تذهب للذكاء")
                 return None
         
-        # ===== 1. حالة = في النهاية =====
-        if q.endswith('='):
-            q = q[:-1]
-        
-        # ===== 2. العمليات الحسابية =====
+        # عمليات حسابية بسيطة
         if all(c in '0123456789+-*/().' for c in q) and '=' not in q:
             try:
                 result = eval(q)
@@ -330,7 +385,7 @@ def solve_simple_math(question):
                         return str(int(result))
                     return str(result)
         
-        # ===== 3. المعادلات =====
+        # معادلات بسيطة
         if '=' in q:
             parts = q.split('=')
             if len(parts) == 2:
@@ -350,26 +405,6 @@ def solve_simple_math(question):
                             return f"الحل: x = {solutions}"
                 except:
                     pass
-        
-        # ===== 4. التفاضل البسيط =====
-        diff_patterns = [
-            (r'مشتقة.*sin', diff(sin(x), x)),
-            (r'مشتقة.*cos', diff(cos(x), x)),
-            (r'مشتقة.*x\*\*2', diff(x**2, x)),
-        ]
-        
-        for pattern, result in diff_patterns:
-            if re.search(pattern, original_q):
-                return str(result)
-        
-        # ===== 5. التكامل البسيط =====
-        if 'تكامل' in original_q:
-            if 'sin' in original_q:
-                return str(integrate(sin(x), x)) + ' + C'
-            elif 'cos' in original_q:
-                return str(integrate(cos(x), x)) + ' + C'
-            elif 'x**2' in original_q:
-                return str(integrate(x**2, x)) + ' + C'
         
         return None
         
@@ -397,64 +432,71 @@ def solve_api():
     if not question:
         return jsonify(success=False, simple_answer="❌ السؤال فارغ")
     
-    # المستوى 1: حل مباشر (للمسائل البسيطة فقط)
+    # المستوى 1: حل مباشر
     direct_result = solve_simple_math(question)
     if direct_result:
         print(f"✅ حل مباشر: {direct_result}")
         return jsonify(
             success=True,
             simple_answer=direct_result,
+            steps=["تم الحل مباشرة باستخدام SymPy"],
             domain="رياضيات",
             confidence=100
         )
     
-    # المستوى 2: استخدام الذكاء للمسائل المعقدة
-    result = None
-    error = None
-    explanation = None
-    
-    # الأولوية لـ Gemini
+    # المستوى 2: Gemini مع خطوات
     if GOOGLE_API_KEY and HAS_GEMINI:
+        wants_explanation = any(word in question.lower() for word in ['شرح', 'خطوات', 'how', 'steps'])
+        
+        if wants_explanation:
+            print("🔄 استخدام Gemini مع الخطوات...")
+            response_json = ask_gemini_with_steps(question)
+            if response_json:
+                try:
+                    data = json.loads(response_json)
+                    steps = data.get('steps', [])
+                    result = data.get('result', '')
+                    explanation = data.get('explanation', '')
+                    
+                    # تبسيط النتيجة
+                    simplified = simplify_result(result)
+                    
+                    return jsonify(
+                        success=True,
+                        simple_answer=simplified,
+                        steps=steps,
+                        explanation=explanation,
+                        domain="رياضيات",
+                        confidence=95
+                    )
+                except:
+                    pass
+        
+        # الطريقة العادية
         print("🔄 استخدام Gemini...")
         analysis = ask_gemini(question)
-        
         if analysis:
             cmd_json = extract_json_advanced(analysis)
             if cmd_json:
                 print(f"📦 JSON: {cmd_json}")
                 result, error = execute_math_command(cmd_json)
-        
-    # إذا فشل Gemini، جرب OpenRouter
-    if not result and OPENROUTER_API_KEY:
-        print("🔄 استخدام OpenRouter...")
-        analysis = ask_openrouter(question)
-        
-        if analysis:
-            cmd_json = extract_json_advanced(analysis)
-            if cmd_json:
-                print(f"📦 JSON: {cmd_json}")
-                result, error = execute_math_command(cmd_json)
-    
-    if result:
-        # شرح إذا طلب
-        if 'شرح' in question.lower():
-            if GOOGLE_API_KEY and HAS_GEMINI:
-                explanation = ask_gemini(f"اشرح حل: {question}\nالنتيجة: {result}")
-            elif OPENROUTER_API_KEY:
-                explanation = ask_openrouter(f"اشرح حل: {question}\nالنتيجة: {result}")
-        
-        return jsonify(
-            success=True,
-            simple_answer=result,
-            explanation=explanation,
-            domain="رياضيات",
-            confidence=95
-        )
+                
+                if result:
+                    simplified = simplify_result(result)
+                    
+                    return jsonify(
+                        success=True,
+                        simple_answer=simplified,
+                        steps=["تم الحل باستخدام الذكاء الاصطناعي"],
+                        domain="رياضيات",
+                        confidence=95
+                    )
     
     # رسالة مساعدة
     return jsonify(
         success=True,
         simple_answer="❓ لم أتمكن من حل السؤال",
+        steps=["جرب كتابة السؤال بصيغة أوضح أو أضف 'شرح' للحصول على خطوات"],
         domain="رياضيات",
         confidence=0
     )
@@ -465,13 +507,16 @@ def solve_api():
 
 if __name__ == '__main__':
     print("\n" + "="*70)
-    print("🔥 MathCore - يدعم Gemini و OpenRouter 🔥")
+    print("🔥 MathCore - النسخة النهائية للمنهاج الفلسطيني 🔥")
     print("="*70)
-    print("✅ المسائل البسيطة: حل مباشر")
-    print("✅ المسائل المعقدة: Gemini أو OpenRouter → SymPy → شرح")
+    print("✅ التفاضل والتكامل + تبسيط + خطوات + شرح")
+    print("✅ إحصاء واحتمالات (متوسط، انحراف، توزيع طبيعي)")
+    print("✅ لوغاريتمات متقدمة + تغيير الأساس")
+    print("✅ دوال مثلثية عكسية (arcsin, arccos, arctan)")
+    print("✅ معادلات تفاضلية (ODE)")
+    print("✅ اختيار من متعدد (تحليل وتفسير)")
     print("="*70)
     print(f"🔑 Gemini: {'✅ متصل' if GOOGLE_API_KEY and HAS_GEMINI else '❌ غير متصل'}")
-    print(f"🔑 OpenRouter: {'✅ متصل' if OPENROUTER_API_KEY else '❌ غير متصل'}")
     print("🌐 http://127.0.0.1:5000")
     print("="*70 + "\n")
     
