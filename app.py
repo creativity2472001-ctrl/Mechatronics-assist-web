@@ -33,58 +33,40 @@ load_dotenv()
 app = Flask(__name__)
 
 # ============================================================
-# 🚀 الرموز الرياضية الأساسية (موسعة)
+# 🚀 الرموز الرياضية الأساسية
 # ============================================================
 x, y, z, t, n = symbols('x y z t n')
 f, g = symbols('f g', cls=Function)
 
-# قاموس آمن يحتوي على كل الدوال الرياضية
 SYMPY_FUNCTIONS = {
-    # الرموز الأساسية
     "x": x, "y": y, "z": z, "t": t, "n": n,
     "f": f, "g": g,
-    
-    # الدوال المثلثية
     "sin": sin, "cos": cos, "tan": tan, "cot": cot,
     "sec": sec, "csc": csc,
     "asin": asin, "acos": acos, "atan": atan,
     "acot": acot, "asec": asec, "acsc": acsc,
-    
-    # الدوال الزائدية
     "sinh": sinh, "cosh": cosh, "tanh": tanh,
     "asinh": asinh, "acosh": acosh, "atanh": atanh,
-    
-    # الدوال الأسية واللوغاريتمية
     "exp": exp, "log": log, "ln": log,
     "sqrt": sqrt, "root": root,
-    
-    # الثوابت
     "pi": pi, "E": E, "I": I, "oo": oo,
-    
-    # الدوال الرياضية
     "Eq": Eq, "Derivative": Derivative,
     "Matrix": Matrix, "Function": Function,
     "Integer": Integer, "Float": Float, "Rational": Rational,
-    
-    # عمليات الجبر
     "simplify": simplify, "expand": expand,
     "factor": factor, "collect": collect,
     "apart": apart, "together": together,
-    
-    # دوال الحل
     "solve": solve, "diff": diff, "integrate": integrate,
     "limit": limit, "summation": summation, "product": product,
     "dsolve": dsolve
 }
 
-# تحويلات متقدمة
 transformations = (
     standard_transformations + 
     (implicit_multiplication, convert_xor)
 )
 
 def safe_parse(expr_str):
-    """تحويل آمن للتعبيرات الرياضية مع دعم كل الدوال"""
     try:
         return parse_expr(
             expr_str,
@@ -102,57 +84,21 @@ def safe_parse(expr_str):
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 def ask_openrouter(question):
-    """إرسال السؤال لـ OpenRouter لفهمه وتحويله لـ JSON"""
     if not OPENROUTER_API_KEY:
         return None
     
-    # برومبت شامل جداً يغطي كل العمليات
     prompt = f"""أنت محلل رياضي خبير. مهمتك تحويل أي سؤال رياضي إلى JSON دقيق.
 
 السؤال: {question}
 
-أنواع العمليات المدعومة مع أمثلة:
+أنواع العمليات:
+1. solve - حل المعادلات: {{"type": "solve", "expression": "...", "variable": "x"}}
+2. diff - تفاضل: {{"type": "diff", "expression": "...", "variable": "x", "order": 1}}
+3. integrate - تكامل: {{"type": "integrate", "expression": "...", "variable": "x"}}
+4. limit - نهايات: {{"type": "limit", "expression": "...", "variable": "x", "point": 0}}
+5. matrix - مصفوفات: {{"type": "matrix", "expression": "[[1,2],[3,4]]", "operation": "det"}}
 
-1. solve - حل المعادلات
-   {{"type": "solve", "expression": "x**2 + 5*x + 6", "variable": "x"}}
-
-2. diff - تفاضل عادي أو جزئي
-   {{"type": "diff", "expression": "sin(2*x)", "variable": "x", "order": 1}}
-   {{"type": "diff", "expression": "x**2*y**3", "variables": ["x","y"], "orders": [1,1]}}
-
-3. integrate - تكامل محدد أو غير محدد
-   {{"type": "integrate", "expression": "x**2", "variable": "x"}}
-   {{"type": "integrate", "expression": "x**2", "variable": "x", "lower": 0, "upper": 2}}
-
-4. limit - نهايات
-   {{"type": "limit", "expression": "sin(x)/x", "variable": "x", "point": 0}}
-
-5. sum - مجموع
-   {{"type": "sum", "expression": "1/n**2", "variable": "n", "from": 1, "to": "oo"}}
-
-6. matrix - عمليات مصفوفات
-   {{"type": "matrix", "expression": "[[1,2],[3,4]]", "operation": "det"}}
-   {{"type": "matrix", "expression": "[[1,2],[3,4]]", "operation": "inv"}}
-
-7. simplify - تبسيط
-   {{"type": "simplify", "expression": "sin(x)**2 + cos(x)**2"}}
-
-8. expand - توسيع
-   {{"type": "expand", "expression": "(x+1)**2"}}
-
-9. factor - تحليل
-   {{"type": "factor", "expression": "x**2 - 4"}}
-
-10. dsolve - معادلات تفاضلية
-    {{"type": "dsolve", "equation": "f(x).diff(x,x) + f(x)", "function": "f", "variable": "x"}}
-
-القواعد:
-1. أعد JSON فقط، لا تكتب أي كلمات أخرى
-2. استخدم ** للأس
-3. variable الافتراضي هو "x"
-4. lower/upper يمكن أن تكون أرقاماً أو "oo" (لانهاية)
-
-الآن حلل السؤال وأعد JSON فقط:"""
+أعد JSON فقط."""
     
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -162,7 +108,7 @@ def ask_openrouter(question):
     data = {
         "model": "deepseek/deepseek-chat",
         "messages": [
-            {"role": "system", "content": "أنت محلل رياضي دقيق. أعد JSON فقط."},
+            {"role": "system", "content": "أعد JSON فقط."},
             {"role": "user", "content": prompt}
         ],
         "temperature": 0,
@@ -187,29 +133,25 @@ def ask_openrouter(question):
             return None
             
     except Exception as e:
-        print(f"🔥 خطأ في الاتصال: {e}")
+        print(f"🔥 خطأ: {e}")
         return None
 
 def extract_json_advanced(text):
-    """استخراج JSON من النص"""
     if not text:
         return None
     
-    # البحث عن JSON
     start = text.find('{')
     end = text.rfind('}')
     
     if start != -1 and end != -1 and end > start:
         json_str = text[start:end+1]
         
-        # محاولة json5
         if HAS_JSON5:
             try:
                 return json5.loads(json_str)
             except:
                 pass
         
-        # محاولة json عادي
         try:
             return json.loads(json_str)
         except:
@@ -218,16 +160,14 @@ def extract_json_advanced(text):
     return None
 
 # ============================================================
-# 🚀 تنفيذ العمليات الرياضية (القوة العظمى)
+# 🚀 تنفيذ العمليات الرياضية
 # ============================================================
 
 def execute_math_command(cmd):
-    """تنفيذ الأمر الرياضي باستخدام SymPy"""
     try:
         cmd_type = cmd.get("type", "")
         print(f"📦 تنفيذ: {cmd_type}")
         
-        # ===== حل المعادلات =====
         if cmd_type == "solve":
             expr = safe_parse(cmd.get("expression", ""))
             var_name = cmd.get("variable", "x")
@@ -236,64 +176,43 @@ def execute_math_command(cmd):
                 solutions = solve(expr, var)
                 return str(solutions), None
         
-        # ===== التفاضل =====
         elif cmd_type == "diff":
             expr = safe_parse(cmd.get("expression", ""))
-            if "variables" in cmd:  # تفاضل جزئي
-                vars_list = [symbols(v) for v in cmd["variables"]]
-                orders = cmd.get("orders", [1] * len(vars_list))
-                result = expr
-                for var, order in zip(vars_list, orders):
-                    result = diff(result, var, order)
-                return str(result), None
-            else:  # تفاضل عادي
-                var_name = cmd.get("variable", "x")
-                var = symbols(var_name)
-                order = cmd.get("order", 1)
+            var_name = cmd.get("variable", "x")
+            var = symbols(var_name)
+            order = cmd.get("order", 1)
+            if expr:
                 result = diff(expr, var, order)
                 return str(result), None
         
-        # ===== التكامل =====
         elif cmd_type == "integrate":
             expr = safe_parse(cmd.get("expression", ""))
             var_name = cmd.get("variable", "x")
             var = symbols(var_name)
             
-            if "lower" in cmd and "upper" in cmd:  # تكامل محدد
-                lower = safe_parse(str(cmd["lower"]))
-                upper = safe_parse(str(cmd["upper"]))
-                result = integrate(expr, (var, lower, upper))
-                return str(result), None
-            else:  # تكامل غير محدد
-                result = integrate(expr, var)
-                return str(result) + " + C", None
+            if expr:
+                if "lower" in cmd and "upper" in cmd:
+                    lower = safe_parse(str(cmd["lower"]))
+                    upper = safe_parse(str(cmd["upper"]))
+                    result = integrate(expr, (var, lower, upper))
+                    return str(result), None
+                else:
+                    result = integrate(expr, var)
+                    return str(result) + " + C", None
         
-        # ===== النهايات =====
         elif cmd_type == "limit":
             expr = safe_parse(cmd.get("expression", ""))
             var_name = cmd.get("variable", "x")
             var = symbols(var_name)
             point = safe_parse(str(cmd.get("point", 0)))
-            result = limit(expr, var, point)
-            return str(result), None
+            if expr:
+                result = limit(expr, var, point)
+                return str(result), None
         
-        # ===== المجاميع =====
-        elif cmd_type == "sum":
-            expr = safe_parse(cmd.get("expression", ""))
-            var_name = cmd.get("variable", "n")
-            var = symbols(var_name)
-            from_val = cmd.get("from", 1)
-            to_val = cmd.get("to", "oo")
-            to_expr = safe_parse(str(to_val)) if isinstance(to_val, str) else to_val
-            result = summation(expr, (var, from_val, to_expr))
-            return str(result), None
-        
-        # ===== المصفوفات =====
         elif cmd_type == "matrix":
             expr_str = cmd.get("expression", "")
             operation = cmd.get("operation", "")
             
-            # تحويل النص إلى مصفوفة
             try:
                 matrix_data = json.loads(expr_str) if isinstance(expr_str, str) else expr_str
                 M = Matrix(matrix_data)
@@ -302,51 +221,10 @@ def execute_math_command(cmd):
                     return str(M.det()), None
                 elif operation == "inv":
                     return str(M.inv()), None
-                elif operation == "transpose":
-                    return str(M.T), None
                 else:
                     return str(M), None
             except:
-                return None, "خطأ في تحويل المصفوفة"
-        
-        # ===== تبسيط =====
-        elif cmd_type == "simplify":
-            expr = safe_parse(cmd.get("expression", ""))
-            if expr:
-                return str(simplify(expr)), None
-        
-        # ===== توسيع =====
-        elif cmd_type == "expand":
-            expr = safe_parse(cmd.get("expression", ""))
-            if expr:
-                return str(expand(expr)), None
-        
-        # ===== تحليل =====
-        elif cmd_type == "factor":
-            expr = safe_parse(cmd.get("expression", ""))
-            if expr:
-                return str(factor(expr)), None
-        
-        # ===== معادلات تفاضلية =====
-        elif cmd_type == "dsolve":
-            eq_str = cmd.get("equation", "")
-            func_name = cmd.get("function", "f")
-            var_name = cmd.get("variable", "x")
-            
-            var = symbols(var_name)
-            f_func = Function(func_name)
-            
-            # تحويل المعادلة
-            eq = safe_parse(eq_str.replace(func_name, func_name))
-            if eq:
-                result = dsolve(eq, f_func(var))
-                return str(result), None
-        
-        # ===== حساب مباشر =====
-        elif cmd_type == "calculate":
-            expr = safe_parse(cmd.get("expression", ""))
-            if expr:
-                return str(expr.evalf()), None
+                return None, "خطأ في المصفوفة"
         
         return None, f"نوع العملية {cmd_type} غير مدعوم"
         
@@ -355,35 +233,44 @@ def execute_math_command(cmd):
         return None, str(e)
 
 # ============================================================
-# 📝 المسائل البسيطة (بدون API) - نسخة محسنة 200%
+# 📝 المسائل البسيطة - مع كشف المسائل المعقدة
 # ============================================================
 
 def solve_simple_math(question):
-    """حل المسائل البسيطة مباشرة - تدعم = في النهاية والمتغيرات"""
+    """حل المسائل البسيطة مباشرة - المعقدة تذهب لـ OpenRouter"""
     try:
-        # تنظيف السؤال
         q = question.replace(" ", "").replace("^", "**")
-        original_q = question  # للأنماط العربية
+        original_q = question
         
-        # ===== 1. حالة خاصة: 1+1= أو 2*3= (علامة = في النهاية) =====
+        # ===== كشف المسائل المعقدة =====
+        complex_patterns = [
+            r'sin\(\d+',      # sin(60...)
+            r'cos\(\d+',      # cos(5...)
+            r'tan\(\d+',      # tan(2...)
+            r'\d+\s*\*?\s*x', # 2x, 5x
+            r'x\^\d+\s*[\+\-\*\/]', # x^2 +, x^3 -
+            r'∫|نهاية|مصفوفة|det|inv', # كلمات مفتاحية
+            r'from.*to|من.*إلى', # تكامل محدد
+            r'lim|نها', # نهايات
+        ]
+        
+        for pattern in complex_patterns:
+            if re.search(pattern, q):
+                print(f"🔄 مسألة معقدة: تذهب لـ OpenRouter")
+                return None
+        
+        # ===== 1. حالة = في النهاية =====
         if q.endswith('='):
-            q = q[:-1]  # احذف الـ = من الأخير
-            # الآن صارت 1+1 (بدون =)
+            q = q[:-1]
         
-        # ===== 2. العمليات الحسابية (أرقام فقط) =====
-        # التحقق من أن السؤال عبارة عن أرقام وعمليات فقط
+        # ===== 2. العمليات الحسابية =====
         if all(c in '0123456789+-*/().' for c in q) and '=' not in q:
             try:
-                # الطريقة 1: eval الآمن للأرقام فقط
                 result = eval(q)
-                # تنسيق النتيجة (إذا كانت عدداً صحيحاً)
                 if isinstance(result, float) and result.is_integer():
                     return str(int(result))
                 return str(result)
-            except Exception as e:
-                print(f"⚠️ eval فشل: {e}")
-                
-                # الطريقة 2: SymPy
+            except:
                 expr = safe_parse(q)
                 if expr:
                     result = expr.evalf()
@@ -391,79 +278,40 @@ def solve_simple_math(question):
                         return str(int(result))
                     return str(result)
         
-        # ===== 3. المعادلات (بـ =) =====
+        # ===== 3. المعادلات =====
         if '=' in q:
             parts = q.split('=')
             if len(parts) == 2:
                 left = parts[0].strip()
                 right = parts[1].strip()
-                
-                # إذا كان الطرف الأيمن فارغ (مثل "x+5=")
                 if right == '':
                     return None
-                
                 try:
                     left_expr = safe_parse(left)
                     right_expr = safe_parse(right)
-                    
-                    if left_expr is not None and right_expr is not None:
+                    if left_expr and right_expr:
                         eq = Eq(left_expr, right_expr)
                         solutions = solve(eq, x)
-                        
-                        # تنسيق الحل
                         if len(solutions) == 1:
                             return f"الحل: x = {solutions[0]}"
                         else:
                             return f"الحل: x = {solutions}"
-                except Exception as e:
-                    print(f"⚠️ فشل حل المعادلة: {e}")
+                except:
+                    pass
         
-        # ===== 4. التفاضل (بالعربية) =====
+        # ===== 4. التفاضل البسيط =====
         diff_patterns = [
             (r'مشتقة.*sin', diff(sin(x), x)),
             (r'مشتقة.*cos', diff(cos(x), x)),
-            (r'مشتقة.*tan', diff(tan(x), x)),
             (r'مشتقة.*x\*\*2', diff(x**2, x)),
-            (r'مشتقة.*x\^2', diff(x**2, x)),
-            (r'مشتقة.*x\*\*3', diff(x**3, x)),
-            (r'مشتقة.*x\^3', diff(x**3, x)),
-            (r'مشتقة.*exp\(x\)', diff(exp(x), x)),
-            (r'مشتقة.*log\(x\)', diff(log(x), x)),
         ]
         
         for pattern, result in diff_patterns:
             if re.search(pattern, original_q):
                 return str(result)
         
-        # ===== 5. التفاضل (بالإنجليزية) =====
-        eng_diff_patterns = [
-            (r'diff.*sin', diff(sin(x), x)),
-            (r'diff.*cos', diff(cos(x), x)),
-            (r'diff.*tan', diff(tan(x), x)),
-            (r'diff.*x\*\*2', diff(x**2, x)),
-            (r'diff.*x\^2', diff(x**2, x)),
-            (r'derivative.*sin', diff(sin(x), x)),
-        ]
-        
-        for pattern, result in eng_diff_patterns:
-            if re.search(pattern, original_q):
-                return str(result)
-        
-        # ===== 6. التكامل (بالعربية) =====
-        if 'تكامل' in original_q or 'integral' in original_q:
-            if 'sin' in original_q:
-                return str(integrate(sin(x), x)) + ' + C'
-            elif 'cos' in original_q:
-                return str(integrate(cos(x), x)) + ' + C'
-            elif 'x**2' in original_q or 'x^2' in original_q:
-                return str(integrate(x**2, x)) + ' + C'
-            elif 'x' in original_q and '^' not in original_q:
-                return str(integrate(x, x)) + ' + C'
-            elif 'exp(x)' in original_q or 'e^x' in original_q:
-                return str(integrate(exp(x), x)) + ' + C'
-        
-        # ===== 7. التكامل (بالإنجليزية) =====
-        if 'integrate' in original_q or 'integral' in original_q:
+        # ===== 5. التكامل البسيط =====
+        if 'تكامل' in original_q:
             if 'sin' in original_q:
                 return str(integrate(sin(x), x)) + ' + C'
             elif 'cos' in original_q:
@@ -474,7 +322,7 @@ def solve_simple_math(question):
         return None
         
     except Exception as e:
-        print(f"⚠️ خطأ في الحل المباشر: {e}")
+        print(f"⚠️ خطأ: {e}")
         return None
 
 # ============================================================
@@ -497,7 +345,7 @@ def solve_api():
     if not question:
         return jsonify(success=False, simple_answer="❌ السؤال فارغ")
     
-    # المستوى 1: حل مباشر (بدون API)
+    # المستوى 1: حل مباشر (للمسائل البسيطة فقط)
     direct_result = solve_simple_math(question)
     if direct_result:
         print(f"✅ حل مباشر: {direct_result}")
@@ -508,7 +356,7 @@ def solve_api():
             confidence=100
         )
     
-    # المستوى 2: استخدام OpenRouter للأسئلة المعقدة
+    # المستوى 2: OpenRouter للمسائل المعقدة
     if OPENROUTER_API_KEY:
         print("🔄 استخدام OpenRouter...")
         analysis = ask_openrouter(question)
@@ -517,41 +365,30 @@ def solve_api():
             cmd_json = extract_json_advanced(analysis)
             
             if cmd_json:
-                print(f"📦 JSON المستخرج: {cmd_json}")
+                print(f"📦 JSON: {cmd_json}")
                 result, error = execute_math_command(cmd_json)
                 
                 if result:
                     print(f"✅ النتيجة: {result}")
+                    
+                    # شرح إذا طلب
+                    explanation = None
+                    if 'شرح' in question.lower():
+                        exp = ask_openrouter(f"اشرح حل: {question}\nالنتيجة: {result}")
+                        explanation = exp
+                    
                     return jsonify(
                         success=True,
                         simple_answer=result,
+                        explanation=explanation,
                         domain="رياضيات",
                         confidence=95
                     )
-                else:
-                    print(f"❌ فشل التنفيذ: {error}")
     
-    # رسالة مساعدة للمستخدم
-    examples = [
-        "1+1",
-        "2*3", 
-        "10/2",
-        "x+5=10",
-        "2*x-4=0",
-        "x/2=5",
-        "مشتقة sin(x)",
-        "مشتقة cos(x)",
-        "تكامل x**2",
-        "x^2 + 5x + 6 = 0",
-    ]
-    
-    import random
-    example = random.choice(examples)
-    
+    # رسالة مساعدة
     return jsonify(
         success=True,
         simple_answer="❓ لم أتمكن من حل السؤال",
-        suggestion=f"جرب صيغة واضحة مثل:\n• {example}",
         domain="رياضيات",
         confidence=0
     )
@@ -562,14 +399,10 @@ def solve_api():
 
 if __name__ == '__main__':
     print("\n" + "="*70)
-    print("🔥 MathCore - النسخة النهائية القوية 🔥")
+    print("🔥 MathCore - النسخة النهائية 🔥")
     print("="*70)
-    print("✅ SymPy: 50+ دالة رياضية")
-    print("✅ العمليات: solve, diff, integrate, limit, sum, matrix, simplify, expand, factor, dsolve")
-    print("✅ الحسابات: 1+1, 2*3, 10/2 (مع أو بدون =)")
-    print("✅ المعادلات: x+5=10, 2*x-4=0, x/2=5")
-    print("✅ التفاضل: مشتقة sin(x), مشتقة cos(x), مشتقة x**2")
-    print("✅ التكامل: تكامل x**2, تكامل sin(x), تكامل cos(x)")
+    print("✅ المسائل البسيطة: حل مباشر")
+    print("✅ المسائل المعقدة: OpenRouter → SymPy → شرح")
     print("="*70)
     print(f"🔑 OpenRouter: {'✅ متصل' if OPENROUTER_API_KEY else '❌ غير متصل'}")
     print("🌐 http://127.0.0.1:5000")
