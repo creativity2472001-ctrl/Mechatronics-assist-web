@@ -1,15 +1,28 @@
 <!DOCTYPE html>
-<html dir="rtl" lang="ar">
+<html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>المساعد الهندسي</title>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+        
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1e40af;
+            --secondary: #64748b;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --background: #f8fafc;
+            --surface: #ffffff;
+            --text: #0f172a;
+            --border: #e2e8f0;
         }
         
         body {
@@ -18,89 +31,73 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            direction: rtl;
+            padding: 16px;
         }
         
         .app-container {
-            background: white;
-            border-radius: 30px;
-            box-shadow: 0 25px 50px rgba(0,0,0,0.3);
-            width: 95%;
-            max-width: 1000px;
+            width: 100%;
+            max-width: 1200px;
             height: 90vh;
+            background: var(--surface);
+            border-radius: 32px;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
             display: flex;
             flex-direction: column;
-            position: relative;
             overflow: hidden;
+            position: relative;
         }
         
-        /* ===== الشريط العلوي ===== */
+        /* Header */
         .header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 15px 20px;
+            padding: 16px 24px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             color: white;
         }
         
-        .menu-btn {
-            background: rgba(255,255,255,0.2);
-            border: none;
-            width: 40px;
-            height: 40px;
+        .menu-btn, .send-btn {
+            width: 48px;
+            height: 48px;
             border-radius: 50%;
+            border: none;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            transition: all 0.3s ease;
             display: flex;
             align-items: center;
             justify-content: center;
-            cursor: pointer;
-            transition: 0.3s;
-            color: white;
-            font-size: 24px;
         }
         
-        .menu-btn:hover {
+        .menu-btn:hover, .send-btn:hover {
             background: rgba(255,255,255,0.3);
             transform: scale(1.1);
+        }
+        
+        .menu-btn:active, .send-btn:active {
+            transform: scale(0.95);
         }
         
         .title {
             font-size: 20px;
-            font-weight: bold;
+            font-weight: 600;
         }
         
-        .send-btn {
-            background: rgba(255,255,255,0.2);
-            border: none;
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: 0.3s;
-            color: white;
-            font-size: 24px;
-        }
-        
-        .send-btn:hover {
-            background: rgba(255,255,255,0.3);
-            transform: scale(1.1);
-        }
-        
-        /* ===== القائمة الجانبية ===== */
+        /* Sidebar */
         .sidebar {
             position: absolute;
             top: 0;
-            right: -300px;
-            width: 280px;
+            right: -320px;
+            width: 300px;
             height: 100%;
-            background: white;
-            box-shadow: -5px 0 25px rgba(0,0,0,0.2);
-            transition: 0.3s;
+            background: var(--surface);
+            box-shadow: -4px 0 20px rgba(0,0,0,0.1);
+            transition: right 0.3s ease;
             z-index: 1000;
-            padding: 20px;
+            padding: 24px;
             overflow-y: auto;
         }
         
@@ -112,42 +109,50 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 30px;
-            padding-bottom: 15px;
-            border-bottom: 2px solid #f0f0f0;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid var(--border);
         }
         
         .close-btn {
-            background: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
             border: none;
-            font-size: 24px;
+            background: var(--border);
+            color: var(--text);
+            font-size: 20px;
             cursor: pointer;
-            color: #667eea;
+            transition: all 0.3s;
+        }
+        
+        .close-btn:hover {
+            background: var(--secondary);
+            color: white;
         }
         
         .sidebar-item {
-            padding: 15px;
-            margin-bottom: 10px;
-            background: #f8f9fa;
-            border-radius: 15px;
+            padding: 16px;
+            margin-bottom: 8px;
+            background: var(--background);
+            border-radius: 12px;
             cursor: pointer;
-            transition: 0.3s;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
         
         .sidebar-item:hover {
-            background: #e9ecef;
-            transform: translateX(-5px);
-        }
-        
-        .sidebar-item i {
-            margin-left: 10px;
-            color: #667eea;
+            background: var(--primary);
+            color: white;
+            transform: translateX(-4px);
         }
         
         .language-list {
+            margin-top: 8px;
+            margin-right: 20px;
             display: none;
-            padding-right: 20px;
-            margin-top: 5px;
         }
         
         .language-list.show {
@@ -155,37 +160,39 @@
         }
         
         .language-item {
-            padding: 10px;
-            margin: 5px 0;
-            background: white;
-            border-radius: 10px;
+            padding: 10px 16px;
+            margin: 4px 0;
+            background: var(--background);
+            border-radius: 8px;
             cursor: pointer;
-            transition: 0.2s;
+            transition: all 0.2s;
         }
         
         .language-item:hover {
-            background: #e3f2fd;
-        }
-        
-        .language-item.active {
-            background: #667eea;
+            background: var(--primary);
             color: white;
         }
         
-        /* ===== منطقة الإجابة ===== */
+        .language-item.active {
+            background: var(--primary);
+            color: white;
+            font-weight: 600;
+        }
+        
+        /* Answer Area */
         .answer-area {
             flex: 1;
             overflow-y: auto;
-            padding: 20px;
-            background: #f5f7fb;
+            padding: 24px;
+            background: var(--background);
         }
         
         .answer-container {
-            background: white;
+            background: var(--surface);
             border-radius: 20px;
-            padding: 20px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
-            min-height: 100px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -2px rgba(0,0,0,0.05);
+            min-height: 200px;
             white-space: pre-wrap;
             line-height: 1.8;
             font-size: 16px;
@@ -193,68 +200,80 @@
         
         .domain-badge {
             display: inline-block;
-            background: #667eea;
+            padding: 4px 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 5px 15px;
-            border-radius: 50px;
+            border-radius: 20px;
             font-size: 14px;
-            margin-bottom: 10px;
+            font-weight: 600;
+            margin-bottom: 16px;
         }
         
-        /* ===== منطقة الإدخال ===== */
+        .ai-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background: var(--secondary);
+            color: white;
+            border-radius: 20px;
+            font-size: 12px;
+            margin-right: 8px;
+        }
+        
+        /* Input Area */
         .input-area {
-            background: white;
-            border-top: 2px solid #f0f0f0;
-            padding: 15px;
+            background: var(--surface);
+            border-top: 2px solid var(--border);
+            padding: 16px 24px;
         }
         
         .input-container {
             display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 10px;
+            gap: 12px;
+            margin-bottom: 12px;
         }
         
         #question {
             flex: 1;
-            border: 2px solid #e0e0e0;
-            border-radius: 25px;
-            padding: 15px 20px;
+            padding: 16px;
+            border: 2px solid var(--border);
+            border-radius: 16px;
             font-size: 16px;
-            outline: none;
-            transition: 0.3s;
-            min-height: 60px;
             resize: vertical;
-            font-family: 'Courier New', monospace;
+            min-height: 80px;
+            transition: all 0.3s;
         }
         
         #question:focus {
-            border-color: #667eea;
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(37,99,235,0.1);
         }
         
-        /* ===== لوحة المفاتيح ===== */
         .keyboard-toggle {
-            background: #f0f0f0;
-            border: none;
-            padding: 10px;
-            border-radius: 25px;
             width: 100%;
-            margin: 10px 0;
+            padding: 12px;
+            background: var(--background);
+            border: 2px solid var(--border);
+            border-radius: 12px;
             cursor: pointer;
             font-size: 16px;
-            transition: 0.3s;
+            font-weight: 600;
+            transition: all 0.3s;
+            margin-bottom: 12px;
         }
         
         .keyboard-toggle:hover {
-            background: #e0e0e0;
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
         }
         
         .math-keyboard {
             display: none;
-            background: #f8f9fa;
-            border-radius: 20px;
-            padding: 15px;
-            margin: 10px 0;
+            background: var(--background);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 12px;
         }
         
         .math-keyboard.show {
@@ -269,86 +288,69 @@
         
         .key-btn {
             aspect-ratio: 1;
-            background: white;
-            border: 2px solid #e0e0e0;
-            border-radius: 15px;
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            background: var(--surface);
             font-size: 20px;
-            font-weight: bold;
+            font-weight: 600;
             cursor: pointer;
-            transition: 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #333;
+            transition: all 0.2s;
+            color: var(--text);
         }
         
         .key-btn:hover {
-            background: #667eea;
+            background: var(--primary);
             color: white;
-            border-color: #667eea;
+            border-color: var(--primary);
+            transform: scale(1.05);
         }
         
         .key-btn:active {
             transform: scale(0.95);
         }
         
-        /* ===== التحميل ===== */
+        /* Loading */
         .loading {
             display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #667eea;
+            width: 24px;
+            height: 24px;
+            border: 3px solid var(--border);
+            border-top-color: var(--primary);
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
         
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            to { transform: rotate(360deg); }
         }
         
-        /* ===== مساعدات ===== */
-        .error {
-            color: #dc3545;
-            padding: 10px;
-            background: #f8d7da;
-            border-radius: 10px;
-        }
-        
-        .success {
-            color: #28a745;
-            padding: 10px;
-            background: #d4edda;
-            border-radius: 10px;
-        }
-        
-        /* ===== تنسيق RTL/LTR ===== */
-        body.ltr {
-            direction: ltr;
-        }
-        
-        body.ltr .sidebar {
-            right: auto;
-            left: -300px;
-        }
-        
-        body.ltr .sidebar.open {
-            left: 0;
-            right: auto;
+        /* Responsive */
+        @media (max-width: 768px) {
+            .app-container {
+                height: 95vh;
+                border-radius: 24px;
+            }
+            
+            .keyboard-grid {
+                grid-template-columns: repeat(4, 1fr);
+            }
+            
+            .sidebar {
+                width: 280px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="app-container">
-        <!-- الشريط العلوي -->
+        <!-- Header -->
         <div class="header">
             <button class="menu-btn" onclick="toggleSidebar()">☰</button>
             <div class="title" id="app-title">المساعد الهندسي</div>
             <button class="send-btn" onclick="sendQuestion()">➡️</button>
         </div>
         
-        <!-- القائمة الجانبية -->
+        <!-- Sidebar -->
         <div class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <h3 id="menu-title">القائمة</h3>
@@ -356,7 +358,8 @@
             </div>
             
             <div class="sidebar-item" onclick="toggleLanguages()">
-                <span>🌐</span> <span id="language-label">اللغة</span>
+                <span>🌐</span>
+                <span id="language-label">اللغة</span>
             </div>
             <div class="language-list" id="language-list">
                 <div class="language-item active" onclick="changeLanguage('ar')">🇸🇦 العربية</div>
@@ -368,26 +371,27 @@
             </div>
             
             <div class="sidebar-item" onclick="showHelp()">
-                <span>❓</span> <span id="help-label">المساعدة</span>
+                <span>❓</span>
+                <span id="help-label">المساعدة</span>
             </div>
             
             <div class="sidebar-item" onclick="showAbout()">
-                <span>ℹ️</span> <span id="about-label">عن التطبيق</span>
+                <span>ℹ️</span>
+                <span id="about-label">عن التطبيق</span>
             </div>
         </div>
         
-        <!-- منطقة الإجابة -->
+        <!-- Answer Area -->
         <div class="answer-area" id="answerArea">
             <div class="answer-container" id="answerContainer">
-                <div id="domainDisplay"></div>
                 <div id="answerContent">اكتب سؤالك واضغط على السهم للإرسال</div>
             </div>
         </div>
         
-        <!-- منطقة الإدخال -->
+        <!-- Input Area -->
         <div class="input-area">
             <div class="input-container">
-                <textarea id="question" rows="2" placeholder="اكتب سؤالك هنا..."></textarea>
+                <textarea id="question" rows="3" placeholder="اكتب سؤالك هنا..."></textarea>
             </div>
             
             <button class="keyboard-toggle" onclick="toggleKeyboard()" id="keyboardBtn">
@@ -554,13 +558,7 @@
             document.getElementById('answerContent').textContent = translations[lang].default_answer;
             
             // تحديث اتجاه الصفحة
-            if (lang === 'ar') {
-                document.body.style.direction = 'rtl';
-                document.body.classList.remove('ltr');
-            } else {
-                document.body.style.direction = 'ltr';
-                document.body.classList.add('ltr');
-            }
+            document.body.style.direction = lang === 'ar' ? 'rtl' : 'ltr';
             
             toggleSidebar();
         }
@@ -591,7 +589,7 @@
                 document.getElementById('answerContent').innerHTML = data.help.replace(/\n/g, '<br>');
                 toggleSidebar();
             } catch (error) {
-                document.getElementById('answerContent').innerHTML = 'Error loading help';
+                document.getElementById('answerContent').innerHTML = '❌ خطأ في تحميل المساعدة';
             }
         }
         
@@ -602,14 +600,14 @@
                 document.getElementById('answerContent').innerHTML = data.about.replace(/\n/g, '<br>');
                 toggleSidebar();
             } catch (error) {
-                document.getElementById('answerContent').innerHTML = 'Error loading about';
+                document.getElementById('answerContent').innerHTML = '❌ خطأ في تحميل معلومات التطبيق';
             }
         }
         
         async function sendQuestion() {
             const question = document.getElementById('question').value.trim();
             if (!question) {
-                alert('الرجاء كتابة سؤال');
+                alert(translations[currentLanguage].placeholder || 'الرجاء كتابة سؤال');
                 return;
             }
             
@@ -636,13 +634,17 @@
                         answerHtml += `<div class="domain-badge">📚 ${data.domain}</div>`;
                     }
                     
+                    if (data.ai_used) {
+                        answerHtml += `<span class="ai-badge">🤖 ${data.ai_used}</span>`;
+                    }
+                    
                     answerHtml += data.answer.replace(/\n/g, '<br>');
                     document.getElementById('answerContent').innerHTML = answerHtml;
                 } else {
-                    document.getElementById('answerContent').innerHTML = `<div class="error">${data.error}</div>`;
+                    document.getElementById('answerContent').innerHTML = `<div style="color: #ef4444;">❌ ${data.error || 'حدث خطأ'}</div>`;
                 }
             } catch (error) {
-                document.getElementById('answerContent').innerHTML = `<div class="error">❌ خطأ في الاتصال</div>`;
+                document.getElementById('answerContent').innerHTML = `<div style="color: #ef4444;">❌ خطأ في الاتصال بالخادم</div>`;
             }
         }
         
@@ -653,6 +655,19 @@
                 sendQuestion();
             }
         });
+        
+        // تحميل حالة التطبيق عند البدء
+        async function loadStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                console.log('App status:', data);
+            } catch (error) {
+                console.error('Failed to load status:', error);
+            }
+        }
+        
+        loadStatus();
     </script>
 </body>
 </html>
