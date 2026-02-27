@@ -885,3 +885,891 @@ class AIManager:
                 base_url="https://api.deepseek.com/v1",
                 timeout=self.timeout
             )
+            
+            response = await client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPTS['default']},
+                    {"role": "user", "content": question}
+                ],
+                temperature=0.7,
+                max_tokens=2000
+            )
+            
+            return self._sanitize_response(response.choices[0].message.content)
+            
+        except Exception as e:
+            logger.error(f"DeepSeek error", api="DeepSeek", error=str(e))
+            return None
+    
+    async def ask_openrouter(self, question: str) -> Optional[str]:
+        """استدعاء OpenRouter"""
+        if not api_keys.validate('openrouter'):
+            return None
+        
+        try:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(
+                api_key=api_keys.get('openrouter'),
+                base_url="https://openrouter.ai/api/v1",
+                timeout=self.timeout
+            )
+            
+            response = await client.chat.completions.create(
+                model="deepseek/deepseek-chat",
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPTS['default']},
+                    {"role": "user", "content": question}
+                ]
+            )
+            
+            return self._sanitize_response(response.choices[0].message.content)
+            
+        except Exception as e:
+            logger.error(f"OpenRouter error", api="OpenRouter", error=str(e))
+            return None
+    
+    async def ask_github_models(self, question: str) -> Optional[str]:
+        """استدعاء GitHub Models"""
+        if not api_keys.validate('github'):
+            return None
+        
+        try:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(
+                base_url="https://models.github.ai/inference/v1",
+                api_key=api_keys.get('github'),
+                timeout=self.timeout
+            )
+            
+            response = await client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPTS['default']},
+                    {"role": "user", "content": question}
+                ]
+            )
+            
+            return self._sanitize_response(response.choices[0].message.content)
+            
+        except Exception as e:
+            logger.error(f"GitHub error", api="GitHub", error=str(e))
+            return None
+    
+    def _sanitize_response(self, response: str) -> str:
+        """تنظيف الرد من المحتوى الضار"""
+        # إزالة HTML
+        response = html.escape(response)
+        # منع JavaScript
+        response = re.sub(r'javascript:', '', response, flags=re.IGNORECASE)
+        return response
+    
+    async def ask_all_parallel(self, question: str) -> Tuple[Optional[str], str]:
+        """استدعاء جميع APIs بشكل متوازي مع سباق"""
+        # تصفية APIs المتاحة فقط
+        available_apis = [(func, name, timeout) 
+                         for func, name, timeout in self.apis 
+                         if api_keys.validate(name.lower())]
+        
+        if not available_apis:
+            logger.warning("No APIs available")
+            return None, ""
+        
+        # إنشاء المهام
+        tasks = []
+        for func, name, _ in available_apis:
+            task = asyncio.create_task(func(question))
+            task.api_name = name  # إضافة اسم API للمهمة
+            tasks.append(task)
+        
+        # سباق المهام
+        try:
+            done, pending = await asyncio.wait(
+                tasks,
+                timeout=self.timeout,
+                return_when=asyncio.FIRST_COMPLETED
+            )
+            
+            # إلغاء المهام المتبقية
+            for task in pending:
+                task.cancel()
+            
+            # معالجة النتائج
+            for task in done:
+                try:
+                    result = task.result()
+                    if result:
+                        logger.info(f"API success", api=task.api_name)
+                        return result, task.api_name
+                except Exception as e:
+                    logger.error(f"API failed", api=task.api_name, error=str(e))
+            
+            return None, ""
+            
+        except asyncio.TimeoutError:
+            logger.error("All APIs timeout")
+            for task in tasks:
+                task.cancel()
+            return None, ""
+
+ai_manager = AIManager()
+
+# ============================================================
+# 🎯 نظام معالجة الأسئلة الرئيسي
+# ============================================================
+
+class QuestionProcessor:
+    """معالج الأسئلة مع دعم Async"""
+    
+    def __init__(self):
+        self.loop = None
+        self.lock = threading.Lock()
+    
+    def get_loop(self):
+        """الحصول على event loop للـ thread الحالي"""
+        with self.lock:
+            if self.loop is None or self.loop.is_closed():
+                self.loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(self.loop)
+            return self.loop
+    
+    async def process_async(self, question: str) -> Dict[str, Any]:
+        """معالجة السؤال بشكل غير متزامن"""
+        
+        # تنظيف السؤال
+        cleaned_question = preprocess_question(question)
+        
+        # التحقق من الطول
+        if len(cleaned_question) > config.MAX_QUESTION_LENGTH:
+            return {
+                "success": False,
+                "error": f"❌ السؤال طويل جداً (الحد الأقصى {config.MAX_QUESTION_LENGTH} حرف)",
+                "domain": Domain.UNKNOWN.value
+            }
+        
+        # كشف المجال
+        domain, confidence, details = domain_detector.detect(question)
+        
+        # إذا كان المجال غير معروف
+        if domain == Domain.UNKNOWN:
+            return {
+                "success": False,
+                "error": "❌ هذا السؤال خارج نطاق التطبيق",
+                "domain": domain.value,
+                "confidence": confidence,
+                "details": details
+            }
+        
+        # البحث في cache
+        cache_key = f"answer:{hashlib.md5(cleaned_question.encode()).hexdigest()}"
+        cached_result = cache.get(cache_key)
+        
+        if cached_result:
+            return {
+                "success": True,
+                "answer": cached_result,
+                "domain": domain.value,
+                "confidence": confidence,
+                "cached": True,
+                "details": details
+            }
+        
+        # استدعاء AI بشكل متوازي
+        answer, api_used = await ai_manager.ask_all_parallel(cleaned_question)
+        
+        if not answer:
+            return {
+                "success": False,
+                "error": "❌ لم نتمكن من الإجابة حالياً. تأكد من توفر خدمة الإنترنت",
+                "domain": domain.value,
+                "confidence": confidence,
+                "details": details
+            }
+        
+        # تخزين النتيجة
+        cache.set(cache_key, answer)
+        
+        # تسجيل الطلب
+        logger.info(
+            "Request processed",
+            domain=domain.value,
+            confidence=confidence,
+            api_used=api_used,
+            question_length=len(question)
+        )
+        
+        return {
+            "success": True,
+            "answer": answer,
+            "domain": domain.value,
+            "confidence": confidence,
+            "api_used": api_used,
+            "cached": False,
+            "details": details
+        }
+    
+    def process(self, question: str) -> Dict[str, Any]:
+        """واجهة متزامنة للمعالجة"""
+        loop = self.get_loop()
+        try:
+            return loop.run_until_complete(self.process_async(question))
+        except Exception as e:
+            logger.error("Process error", error=str(e))
+            return {
+                "success": False,
+                "error": "❌ حدث خطأ في معالجة السؤال",
+                "domain": Domain.UNKNOWN.value
+            }
+
+question_processor = QuestionProcessor()
+
+# ============================================================
+# 🎯 المسارات الرئيسية
+# ============================================================
+
+@app.route('/')
+def home():
+    """الصفحة الرئيسية"""
+    return render_template_string(INDEX_HTML)
+
+@app.route('/api/ask', methods=['POST'])
+@limiter.limit(config.RATE_LIMIT_ASK)
+def ask():
+    """معالجة الأسئلة"""
+    try:
+        data = request.get_json()
+        question = data.get('question', '').strip()
+        
+        if not question:
+            return jsonify({
+                "success": False, 
+                "error": "❌ السؤال فارغ"
+            })
+        
+        result = question_processor.process(question)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error("Unhandled error", error=str(e), traceback=traceback.format_exc())
+        return jsonify({
+            "success": False,
+            "error": "❌ حدث خطأ داخلي"
+        }), 500
+
+@app.route('/api/execute', methods=['POST'])
+@limiter.limit(config.RATE_LIMIT_EXECUTE)
+async def execute_code():
+    """تنفيذ كود Python"""
+    try:
+        data = request.get_json()
+        code = data.get('code', '').strip()
+        
+        if not code:
+            return jsonify({
+                "success": False,
+                "error": "❌ الكود فارغ"
+            })
+        
+        result = await safe_executor.execute_async(code)
+        
+        return jsonify({
+            "success": result.success,
+            "result": result.result,
+            "error": result.error,
+            "execution_time": result.execution_time
+        })
+        
+    except Exception as e:
+        logger.error("Code execution error", error=str(e))
+        return jsonify({
+            "success": False,
+            "error": "❌ حدث خطأ في تنفيذ الكود"
+        }), 500
+
+@app.route('/api/status', methods=['GET'])
+def get_status():
+    """حالة التطبيق"""
+    return jsonify({
+        "status": "running",
+        "version": "7.0",
+        "timestamp": datetime.utcnow().isoformat(),
+        "config": {
+            "env": config.ENV,
+            "debug": config.DEBUG,
+            "cache_ttl": config.CACHE_TTL,
+            "rate_limits": {
+                "ask": config.RATE_LIMIT_ASK,
+                "execute": config.RATE_LIMIT_EXECUTE
+            }
+        },
+        "apis": {
+            name: api_keys.validate(name) 
+            for name in ['gemini', 'deepseek', 'openrouter', 'github']
+        },
+        "cache": cache.get_stats(),
+        "domains": [d.value for d in Domain if d != Domain.UNKNOWN]
+    })
+
+@app.route('/api/domains', methods=['GET'])
+def get_domains():
+    """قائمة المجالات المدعومة"""
+    return jsonify({
+        "domains": [domain.value for domain in Domain if domain != Domain.UNKNOWN]
+    })
+
+@app.route('/api/analyze', methods=['POST'])
+def analyze_question():
+    """تحليل السؤال فقط بدون إجابة"""
+    try:
+        data = request.get_json()
+        question = data.get('question', '').strip()
+        
+        if not question:
+            return jsonify({"success": False, "error": "السؤال فارغ"})
+        
+        domain, confidence, details = domain_detector.detect(question)
+        
+        return jsonify({
+            "success": True,
+            "domain": domain.value,
+            "confidence": confidence,
+            "details": details,
+            "processed": preprocess_question(question)
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    """معالج تجاوز الحد المسموح"""
+    return jsonify({
+        "success": False,
+        "error": "❌ تجاوزت الحد المسموح من الطلبات. حاول بعد دقيقة"
+    }), 429
+
+# ============================================================
+# 📄 قالب HTML (مضمن للتبسيط)
+# ============================================================
+
+INDEX_HTML = '''
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مساعد الميكاترونكس v7.0</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 900px;
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.2em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        
+        .status-bar {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .status-item {
+            background: rgba(255,255,255,0.2);
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            backdrop-filter: blur(5px);
+        }
+        
+        .chat-area {
+            padding: 30px;
+        }
+        
+        .input-group {
+            margin-bottom: 20px;
+        }
+        
+        textarea {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1em;
+            resize: vertical;
+            min-height: 120px;
+            transition: border-color 0.3s;
+        }
+        
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+        }
+        
+        .ask-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .ask-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102,126,234,0.4);
+        }
+        
+        .clear-btn {
+            background: #f44336;
+            color: white;
+        }
+        
+        .clear-btn:hover:not(:disabled) {
+            background: #d32f2f;
+        }
+        
+        .analyze-btn {
+            background: #4caf50;
+            color: white;
+        }
+        
+        .analyze-btn:hover:not(:disabled) {
+            background: #388e3c;
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .result-area {
+            background: #f5f5f5;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .domain-badge {
+            background: #667eea;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+        
+        .confidence-badge {
+            background: #4caf50;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+        
+        .api-badge {
+            background: #ff9800;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+        
+        .answer {
+            line-height: 1.8;
+            white-space: pre-wrap;
+            font-size: 1.1em;
+            max-height: 500px;
+            overflow-y: auto;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .loading.active {
+            display: block;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error {
+            color: #f44336;
+            background: #ffebee;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            border-right: 4px solid #f44336;
+        }
+        
+        .info-text {
+            color: #666;
+            font-size: 0.9em;
+            margin-top: 15px;
+            padding: 10px;
+            background: #e3f2fd;
+            border-radius: 8px;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 20px;
+            background: #f9f9f9;
+            border-top: 1px solid #e0e0e0;
+            color: #666;
+        }
+        
+        .details-panel {
+            margin-top: 15px;
+            padding: 10px;
+            background: #e8eaf6;
+            border-radius: 8px;
+            font-size: 0.9em;
+        }
+        
+        .details-panel summary {
+            cursor: pointer;
+            color: #3f51b5;
+            font-weight: bold;
+        }
+        
+        .version-badge {
+            background: #9c27b0;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 مساعد الميكاترونكس <span class="version-badge">v7.0</span></h1>
+            <p>نسخة متطورة مع دعم متعدد لمزودي الذكاء الاصطناعي</p>
+            <div class="status-bar" id="statusBar">
+                <div class="status-item">⏳ جاري تحميل الحالة...</div>
+            </div>
+        </div>
+        
+        <div class="chat-area">
+            <div class="input-group">
+                <textarea id="questionInput" placeholder="اكتب سؤالك هنا... (رياضيات، فيزياء، ميكانيكا، كهرباء، PLC)"></textarea>
+            </div>
+            
+            <div class="button-group">
+                <button class="ask-btn" id="askBtn" onclick="askQuestion()">📤 إرسال السؤال</button>
+                <button class="analyze-btn" id="analyzeBtn" onclick="analyzeQuestion()">🔍 تحليل فقط</button>
+                <button class="clear-btn" id="clearBtn" onclick="clearChat()">🧹 مسح</button>
+            </div>
+            
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <div>جاري معالجة سؤالك...</div>
+            </div>
+            
+            <div class="result-area" id="resultArea" style="display: none;">
+                <div class="result-header" id="resultHeader"></div>
+                <div class="answer" id="answer"></div>
+                <details class="details-panel" id="detailsPanel" style="display: none;">
+                    <summary>تفاصيل التحليل</summary>
+                    <div id="details"></div>
+                </details>
+            </div>
+            
+            <div class="error" id="error" style="display: none;"></div>
+            
+            <div class="info-text">
+                💡 يمكنك استخدام الرموز الرياضية: √, ∫, ∑, π, ∞ وغيرها<br>
+                ⚡ Ctrl+Enter للإرسال السريع
+            </div>
+        </div>
+        
+        <div class="footer">
+            Mechatronics Assistant v7.0 | جميع الحقوق محفوظة © 2026
+        </div>
+    </div>
+    
+    <script>
+        // تحميل حالة APIs عند بدء التشغيل
+        window.onload = async function() {
+            await loadStatus();
+        };
+        
+        async function loadStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                
+                const statusBar = document.getElementById('statusBar');
+                statusBar.innerHTML = '';
+                
+                const apis = [
+                    { name: 'Gemini', status: data.apis.gemini },
+                    { name: 'DeepSeek', status: data.apis.deepseek },
+                    { name: 'OpenRouter', status: data.apis.openrouter },
+                    { name: 'GitHub', status: data.apis.github }
+                ];
+                
+                apis.forEach(api => {
+                    const item = document.createElement('div');
+                    item.className = 'status-item';
+                    item.textContent = api.status ? `✅ ${api.name}` : `❌ ${api.name}`;
+                    statusBar.appendChild(item);
+                });
+                
+                // إضافة معلومات cache
+                const cacheItem = document.createElement('div');
+                cacheItem.className = 'status-item';
+                cacheItem.textContent = `💾 ${data.cache.hit_rate}%`;
+                cacheItem.title = `Cache hits: ${data.cache.hits}, Misses: ${data.cache.misses}`;
+                statusBar.appendChild(cacheItem);
+                
+            } catch (error) {
+                console.error('Error loading status:', error);
+            }
+        }
+        
+        async function askQuestion() {
+            await processQuestion(false);
+        }
+        
+        async function analyzeQuestion() {
+            await processQuestion(true);
+        }
+        
+        async function processQuestion(analyzeOnly = false) {
+            const question = document.getElementById('questionInput').value.trim();
+            if (!question) {
+                alert('الرجاء كتابة سؤال');
+                return;
+            }
+            
+            // إظهار التحميل
+            document.getElementById('loading').classList.add('active');
+            document.getElementById('resultArea').style.display = 'none';
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('askBtn').disabled = true;
+            document.getElementById('analyzeBtn').disabled = true;
+            
+            try {
+                const endpoint = analyzeOnly ? '/api/analyze' : '/api/ask';
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ question: question })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // عرض النتيجة
+                    const header = document.getElementById('resultHeader');
+                    header.innerHTML = '';
+                    
+                    const domainBadge = document.createElement('span');
+                    domainBadge.className = 'domain-badge';
+                    domainBadge.textContent = `📚 ${data.domain}`;
+                    header.appendChild(domainBadge);
+                    
+                    if (data.confidence) {
+                        const confidenceBadge = document.createElement('span');
+                        confidenceBadge.className = 'confidence-badge';
+                        confidenceBadge.textContent = `🎯 ${Math.round(data.confidence * 100)}%`;
+                        header.appendChild(confidenceBadge);
+                    }
+                    
+                    if (data.api_used && !analyzeOnly) {
+                        const apiBadge = document.createElement('span');
+                        apiBadge.className = 'api-badge';
+                        apiBadge.textContent = `⚡ ${data.api_used}`;
+                        header.appendChild(apiBadge);
+                    }
+                    
+                    if (data.cached) {
+                        const cacheBadge = document.createElement('span');
+                        cacheBadge.className = 'api-badge';
+                        cacheBadge.style.background = '#9c27b0';
+                        cacheBadge.textContent = '💾 من المخزن';
+                        header.appendChild(cacheBadge);
+                    }
+                    
+                    // عرض الإجابة أو التحليل
+                    if (analyzeOnly) {
+                        document.getElementById('answer').innerHTML = `
+                            <strong>السؤال بعد المعالجة:</strong><br>
+                            ${escapeHtml(data.processed)}<br><br>
+                            <strong>نتيجة التحليل:</strong><br>
+                            ${JSON.stringify(data.details, null, 2)}
+                        `;
+                    } else {
+                        document.getElementById('answer').innerHTML = data.answer.replace(/\\n/g, '<br>');
+                    }
+                    
+                    // عرض التفاصيل إذا وجدت
+                    if (data.details) {
+                        const detailsDiv = document.getElementById('details');
+                        detailsDiv.innerHTML = Object.entries(data.details)
+                            .map(([k, v]) => `${k}: ${v} نقطة`)
+                            .join('<br>');
+                        document.getElementById('detailsPanel').style.display = 'block';
+                    } else {
+                        document.getElementById('detailsPanel').style.display = 'none';
+                    }
+                    
+                    document.getElementById('resultArea').style.display = 'block';
+                    
+                } else {
+                    // عرض الخطأ
+                    document.getElementById('error').innerHTML = escapeHtml(data.error);
+                    document.getElementById('error').style.display = 'block';
+                }
+                
+            } catch (error) {
+                document.getElementById('error').innerHTML = '❌ حدث خطأ في الاتصال';
+                document.getElementById('error').style.display = 'block';
+            } finally {
+                // إخفاء التحميل
+                document.getElementById('loading').classList.remove('active');
+                document.getElementById('askBtn').disabled = false;
+                document.getElementById('analyzeBtn').disabled = false;
+            }
+        }
+        
+        function escapeHtml(unsafe) {
+            if (!unsafe) return '';
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+        
+        function clearChat() {
+            document.getElementById('questionInput').value = '';
+            document.getElementById('resultArea').style.display = 'none';
+            document.getElementById('error').style.display = 'none';
+        }
+        
+        // دعم Enter للزر
+        document.getElementById('questionInput').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && e.ctrlKey) {
+                e.preventDefault();
+                askQuestion();
+            }
+        });
+        
+        // تحديث الحالة كل دقيقة
+        setInterval(loadStatus, 60000);
+    </script>
+</body>
+</html>
+'''
+
+# ============================================================
+# 🚀 التشغيل
+# ============================================================
+
+if __name__ == '__main__':
+    print("\n" + "="*90)
+    print("🔥 MECHATRONICS ASSISTANT v7.0 - Production Ready")
+    print("="*90)
+    print("✅ Gemini | DeepSeek | OpenRouter | GitHub")
+    print("✅ Async Processing")
+    print("✅ Redis Cache")
+    print("✅ Rate Limiting")
+    print("✅ XSS Protection")
+    print("✅ Domain Detection")
+    print("✅ Production Ready")
+    print("="*90)
+    print("🌐 http://127.0.0.1:5000")
+    print("="*90 + "\n")
+    
+    # تشغيل التطبيق
+    app.run(
+        host=config.HOST,
+        port=config.PORT,
+        debug=config.DEBUG,
+        threaded=True
+    )
