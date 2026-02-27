@@ -575,25 +575,38 @@ class StepByStepSolver:
                 
                 if degree == 1:
                     steps.append(f"**الخطوة 3:** معادلة خطية، نحلها بعزل {var}")
-                    a, b = equation.as_coefficients_dict()
-                    steps.append(f"نكتب المعادلة بالصيغة: ax + b = 0")
+                    # استخراج المعاملات
+                    coeffs = equation.as_poly(var).all_coeffs()
+                    if len(coeffs) == 2:
+                        a, b = coeffs
+                        steps.append(f"المعادلة بالصيغة: {a}x + {b} = 0")
+                        steps.append(f"x = -{b}/{a} = {-b/a}")
                     
                 elif degree == 2:
                     steps.append(f"**الخطوة 3:** معادلة تربيعية، نستخدم القانون العام")
-                    a = sp.degree(equation, var, coefficient=True)
-                    b = sp.degree(equation, var, coefficient=True, degree=1)
-                    c = sp.degree(equation, var, coefficient=True, degree=0)
-                    
-                    steps.append(f"a = {a}, b = {b}, c = {c}")
-                    discriminant = b**2 - 4*a*c
-                    steps.append(f"**الخطوة 4:** نحسب المميز Δ = b² - 4ac = {discriminant}")
-                    
-                    if discriminant > 0:
-                        steps.append(f"Δ > 0 → حلان حقيقيان")
-                    elif discriminant == 0:
-                        steps.append(f"Δ = 0 → حل مزدوج")
-                    else:
-                        steps.append(f"Δ < 0 → حلان مركبان")
+                    coeffs = equation.as_poly(var).all_coeffs()
+                    if len(coeffs) == 3:
+                        a, b, c = coeffs
+                        steps.append(f"a = {a}, b = {b}, c = {c}")
+                        discriminant = b**2 - 4*a*c
+                        steps.append(f"**الخطوة 4:** نحسب المميز Δ = b² - 4ac = {discriminant}")
+                        
+                        if discriminant > 0:
+                            steps.append(f"Δ > 0 → حلان حقيقيان")
+                            x1 = (-b + sp.sqrt(discriminant)) / (2*a)
+                            x2 = (-b - sp.sqrt(discriminant)) / (2*a)
+                            steps.append(f"x₁ = (-b + √Δ)/(2a) = {x1}")
+                            steps.append(f"x₂ = (-b - √Δ)/(2a) = {x2}")
+                        elif discriminant == 0:
+                            steps.append(f"Δ = 0 → حل مزدوج")
+                            x = -b / (2*a)
+                            steps.append(f"x = -b/(2a) = {x}")
+                        else:
+                            steps.append(f"Δ < 0 → حلان مركبان")
+                            real = -b / (2*a)
+                            imag = sp.sqrt(-discriminant) / (2*a)
+                            steps.append(f"x₁ = {real} + {imag}i")
+                            steps.append(f"x₂ = {real} - {imag}i")
             
             # حل المعادلة
             solutions = sp.solve(equation, var)
@@ -602,7 +615,8 @@ class StepByStepSolver:
             if len(solutions) == 1:
                 steps.append(f"{var} = {solutions[0]}")
             else:
-                steps.append(f"{var} = {solutions}")
+                for i, sol in enumerate(solutions, 1):
+                    steps.append(f"{var}_{i} = {sol}")
             
             return {
                 "result": f"**الحلول:** {solutions}",
@@ -625,27 +639,53 @@ class StepByStepSolver:
             steps.append("**حل نظام المعادلات:**")
             
             # استخراج المعادلات
-            eq_pattern = r'([^,]+)'
-            equations = re.findall(eq_pattern, question)
-            eq_list = []
+            equations = re.findall(r'([^,]+=[^,]+)', question)
             
-            for eq in equations[:2]:  # نأخذ أول معادلتين
-                if '=' in eq:
-                    left, right = eq.split('=')
-                    eq_list.append(f"{left} - ({right}) = 0")
-                    steps.append(f"المعادلة: {eq}")
+            if len(equations) < 2:
+                return {"result": "لم يتم العثور على معادلتين", "steps": steps}
             
-            steps.append("\n**طرق الحل الممكنة:**")
-            steps.append("1. طريقة التعويض")
-            steps.append("2. طريقة الحذف")
-            steps.append("3. طريقة المصفوفات")
+            steps.append(f"المعادلة الأولى: {equations[0]}")
+            steps.append(f"المعادلة الثانية: {equations[1]}")
             
-            # يمكن إضافة خطوات تفصيلية أكثر حسب النظام
+            steps.append("\n**طريقة الحل (بالتعويض):**")
+            steps.append("1. نعزل أحد المتغيرات من المعادلة الأولى")
+            steps.append("2. نعوض في المعادلة الثانية")
+            steps.append("3. نحل المعادلة الناتجة")
+            steps.append("4. نعوض الناتج لإيجاد المتغير الآخر")
+            
+            # محاولة الحل باستخدام SymPy
+            try:
+                vars = set()
+                for eq in equations:
+                    for c in eq:
+                        if c.isalpha() and c not in ['x', 'y']:
+                            vars.add(c)
+                
+                if not vars:
+                    vars = {'x', 'y'}
+                
+                symbols = {v: sp.symbols(v) for v in vars}
+                
+                eq1 = sp.Eq(*[sp.sympify(part) for part in equations[0].split('=')])
+                eq2 = sp.Eq(*[sp.sympify(part) for part in equations[1].split('=')])
+                
+                solution = sp.solve([eq1, eq2], list(symbols.values()))
+                
+                steps.append("\n**الحل:**")
+                if isinstance(solution, list):
+                    for sol in solution:
+                        for var, val in sol.items():
+                            steps.append(f"{var} = {val}")
+                elif isinstance(solution, dict):
+                    for var, val in solution.items():
+                        steps.append(f"{var} = {val}")
+            except:
+                steps.append("\n**ملاحظة:** يمكن استخدام طريقة المصفوفات أيضاً")
             
             return {
-                "result": "تم حل النظام بنجاح",
+                "result": "تم إيجاد حل النظام",
                 "steps": steps,
-                "answer": "x = 2, y = 3 (مثال)"
+                "answer": str(solution) if 'solution' in locals() else "يمكن حله بالطرق المذكورة"
             }
             
         except Exception as e:
@@ -667,24 +707,39 @@ class StepByStepSolver:
             
             if sigma_match:
                 var = sigma_match.group(1)
-                start = sigma_match.group(2)
-                end = sigma_match.group(3) or start
+                start = int(sigma_match.group(2))
+                end = sigma_match.group(3)
                 expr = sigma_match.group(4)
                 
                 steps.append(f"المتغير: {var}")
                 steps.append(f"البداية: {start}")
-                steps.append(f"النهاية: {end}")
+                steps.append(f"النهاية: {end if end else '∞'}")
                 steps.append(f"التعبير: {expr}")
                 
-                steps.append("\n**الخطوات:**")
-                steps.append(f"1. نعوض {var} = {start} في التعبير")
-                steps.append(f"2. نعوض {var} = {start+1} في التعبير")
-                steps.append("3. نجمع النتائج")
+                if end and end.isdigit():
+                    end_val = int(end)
+                    steps.append(f"\n**الخطوات التفصيلية:**")
+                    total = 0
+                    for i in range(start, end_val + 1):
+                        term = expr.replace(var, str(i))
+                        try:
+                            val = eval(term)
+                            steps.append(f"عند {var} = {i}: {term} = {val}")
+                            total += val
+                        except:
+                            steps.append(f"عند {var} = {i}: {term}")
+                    steps.append(f"\n**المجموع الكلي = {total}**")
+                else:
+                    steps.append("\n**متسلسلة لا نهائية:**")
+                    steps.append("لحساب المتسلسلات اللانهائية، نستخدم اختبارات التقارب:")
+                    steps.append("1. اختبار النسبة")
+                    steps.append("2. اختبار الجذر")
+                    steps.append("3. اختبار التكامل")
             
             return {
                 "result": "نتيجة المتسلسلة",
                 "steps": steps,
-                "answer": "المجموع = ..."
+                "answer": "يمكن حسابها بالطرق المذكورة"
             }
             
         except Exception as e:
@@ -727,14 +782,47 @@ class StepByStepSolver:
                     factor_counts = Counter(factors)
                     
                     steps.append(f"**الخطوة 2:** نجمع العوامل المكررة")
+                    root_type = 2
+                    if 'تكعيبي' in question:
+                        root_type = 3
+                    elif 'رباعي' in question:
+                        root_type = 4
+                    
+                    pairs = []
                     for f, count in factor_counts.items():
                         steps.append(f"العامل {f} تكرر {count} مرة")
+                        pairs.append(count // root_type)
+                    
+                    # حساب الجذر
+                    result = 1
+                    for f, pair in zip(factor_counts.keys(), pairs):
+                        if pair > 0:
+                            result *= f ** pair
+                            steps.append(f"نخرج {f}^{pair} خارج الجذر")
+                    
+                    remaining = number // (result ** root_type)
+                    if remaining > 1:
+                        steps.append(f"يتبقى داخل الجذر: {remaining}")
+                    
+                    steps.append(f"\n**الخطوة 3:** نبسط الجذر")
+                    
+                    if remaining == 1:
+                        steps.append(f"الجذر التبسيط = {result}")
+                    else:
+                        steps.append(f"الجذر التبسيط = {result} · {get_root_symbol(root_type)}{remaining}")
             
             # حساب الجذر
-            result = sp.sqrt(number) if 'تربيعي' in question else sp.root(number, 3)
+            if 'تربيعي' in question:
+                result = sp.sqrt(number)
+            elif 'تكعيبي' in question:
+                result = sp.root(number, 3)
+            else:
+                result = sp.sqrt(number)
             
             steps.append(f"\n**النتيجة النهائية:**")
             steps.append(f"الجذر = {result}")
+            if hasattr(result, 'evalf'):
+                steps.append(f"القيمة التقريبية = {result.evalf():.6f}")
             
             return {
                 "result": f"**النتيجة:** {result}",
@@ -746,7 +834,7 @@ class StepByStepSolver:
             return {"result": f"خطأ في الحساب: {e}", "steps": []}
     
     # ============================================================
-    # خطوات التحليل
+    # خطوات التحليل والنشر والتبسيط
     # ============================================================
     
     def _factor_steps(self, question: str, expr_str: str) -> Dict:
@@ -759,12 +847,32 @@ class StepByStepSolver:
             steps.append(f"**المطلوب:** تحليل {expr_str}")
             
             if expr.is_polynomial():
-                steps.append(f"**الخطوة 1:** نبحث عن العوامل المشتركة")
+                steps.append(f"**الخطوة 1:** نبحث عن العامل المشترك الأكبر")
                 
                 # البحث عن العامل المشترك الأكبر
                 terms = expr.as_ordered_terms()
                 if len(terms) > 1:
-                    steps.append(f"**الخطوة 2:** نستخدم قانون التوزيع")
+                    # استخراج المعاملات
+                    coeffs = [abs(term.as_coeff_Mul()[0]) for term in terms]
+                    from math import gcd
+                    common_coeff = 1
+                    for c in coeffs:
+                        if hasattr(c, 'p'):  # إذا كان عدداً نسبياً
+                            common_coeff = gcd(common_coeff, c.p)
+                    
+                    if common_coeff > 1:
+                        steps.append(f"المعامل المشترك الأكبر = {common_coeff}")
+                    
+                    # البحث عن المتغيرات المشتركة
+                    var_powers = {}
+                    for term in terms:
+                        for var in term.free_symbols:
+                            power = term.as_poly(var).degree()
+                            if var not in var_powers or power < var_powers[var]:
+                                var_powers[var] = power
+                    
+                    if var_powers:
+                        steps.append("المتغيرات المشتركة: " + ", ".join([f"{var}^{power}" for var, power in var_powers.items() if power > 0]))
             
             factored = sp.factor(expr)
             steps.append(f"\n**النتيجة النهائية:** {factored}")
@@ -784,8 +892,14 @@ class StepByStepSolver:
         try:
             expr = sp.sympify(expr_str)
             steps.append(f"**نشر التعبير:** {expr_str}")
+            
+            if expr.is_Pow and expr.exp.is_number and expr.exp > 1:
+                steps.append(f"**الخطوة 1:** نستخدم نظرية ذات الحدين")
+                steps.append(f"(a + b)^{expr.exp} = Σ C({expr.exp}, k) a^{expr.exp-k} b^k")
+            
             expanded = sp.expand(expr)
             steps.append(f"**النتيجة:** {expanded}")
+            
             return {"result": str(expanded), "steps": steps, "answer": str(expanded)}
         except Exception as e:
             return {"result": f"خطأ: {e}", "steps": []}
@@ -796,11 +910,22 @@ class StepByStepSolver:
         try:
             expr = sp.sympify(expr_str)
             steps.append(f"**تبسيط التعبير:** {expr_str}")
+            
+            steps.append("**الخطوة 1:** نجمع الحدود المتشابهة")
+            steps.append("**الخطوة 2:** نبسط الكسور إن وجدت")
+            steps.append("**الخطوة 3:** نستخدم القوانين الرياضية")
+            
             simplified = sp.simplify(expr)
             steps.append(f"**النتيجة:** {simplified}")
+            
             return {"result": str(simplified), "steps": steps, "answer": str(simplified)}
         except Exception as e:
             return {"result": f"خطأ: {e}", "steps": []}
+
+def get_root_symbol(root_type):
+    """الحصول على رمز الجذر"""
+    symbols = {2: '√', 3: '∛', 4: '∜'}
+    return symbols.get(root_type, f'{root_type}√')
 
 # ============================================================
 # 🧠 Math Intent Engine Pro - النسخة المتكاملة مع الخطوات والذاكرة
@@ -875,12 +1000,12 @@ class MathIntentEngine:
         templates.update({
             'sin_derivative': {
                 'pattern': r'مشتقة\s*sin\s*\(\s*(\d*\.?\d*)\s*\*?\s*x\s*\)',
-                'handler': lambda m: f"مشتقة sin({m.group(1)}x) = {m.group(1) or 1}·cos({m.group(1)}x)",
+                'handler': self._template_sin_derivative,
                 'confidence': 1.0
             },
             'cos_derivative': {
                 'pattern': r'مشتقة\s*cos\s*\(\s*(\d*\.?\d*)\s*\*?\s*x\s*\)',
-                'handler': lambda m: f"مشتقة cos({m.group(1)}x) = -{m.group(1) or 1}·sin({m.group(1)}x)",
+                'handler': self._template_cos_derivative,
                 'confidence': 1.0
             }
         })
@@ -889,7 +1014,12 @@ class MathIntentEngine:
         templates.update({
             'root_square': {
                 'pattern': r'(?:جذر|الجذر)\s+(?:التربيعي)?\s*(?:للعدد|لعدد|ل)?\s*(\d+(?:\.\d+)?)',
-                'handler': lambda m: f"√{m.group(1)} = {sp.sqrt(float(m.group(1)))}",
+                'handler': self._template_root_square,
+                'confidence': 1.0
+            },
+            'root_cube': {
+                'pattern': r'(?:جذر|الجذر)\s+التكعيبي\s*(?:للعدد|لعدد|ل)?\s*(\d+(?:\.\d+)?)',
+                'handler': self._template_root_cube,
                 'confidence': 1.0
             }
         })
@@ -909,7 +1039,73 @@ class MathIntentEngine:
         intents.append(('calculate', [], self._handle_calculate, 0.98))
         return intents
     
+    # ============================================================
+    # معالجات القوالب
+    # ============================================================
+    
+    def _template_quadratic(self, match):
+        """معالجة المعادلة التربيعية"""
+        a, b, c = match.groups()
+        a = float(a) if a and a not in '+-' else 1.0
+        b = float(b.replace(' ', '')) if b else 0.0
+        c = float(c.replace(' ', '')) if c else 0.0
+        
+        x = sp.symbols('x')
+        expr = a*x**2 + b*x + c
+        solutions = sp.solve(expr, x)
+        
+        discriminant = b**2 - 4*a*c
+        
+        result = f"**المعادلة: {a}x² + {b}x + {c} = 0**\n\n"
+        result += f"المميز (Δ) = {discriminant}\n\n"
+        
+        if discriminant > 0:
+            result += f"حلان حقيقيان:\n"
+            result += f"x₁ = {solutions[0]}\n"
+            result += f"x₂ = {solutions[1]}"
+        elif discriminant == 0:
+            result += f"حل مزدوج:\nx = {solutions[0]}"
+        else:
+            result += f"حلان مركبان:\n{solutions[0]}, {solutions[1]}"
+        
+        return result
+    
+    def _template_linear(self, match):
+        """معالجة المعادلة الخطية"""
+        a, b, c = match.groups()
+        a = float(a) if a and a not in '+-' else 1.0
+        b = float(b.replace(' ', '')) if b else 0.0
+        c = float(c.replace(' ', ''))
+        
+        x_val = (c - b) / a
+        return f"**حل المعادلة:**\n{a}x + {b} = {c}\n\nx = {x_val}"
+    
+    def _template_sin_derivative(self, match):
+        """مشتقة sin"""
+        k = match.group(1)
+        k = float(k) if k else 1.0
+        return f"مشتقة sin({k}x) = {k}·cos({k}x)"
+    
+    def _template_cos_derivative(self, match):
+        """مشتقة cos"""
+        k = match.group(1)
+        k = float(k) if k else 1.0
+        return f"مشتقة cos({k}x) = -{k}·sin({k}x)"
+    
+    def _template_root_square(self, match):
+        """جذر تربيعي"""
+        num = float(match.group(1))
+        result = sp.sqrt(num)
+        return f"√{num} = {result}"
+    
+    def _template_root_cube(self, match):
+        """جذر تكعيبي"""
+        num = float(match.group(1))
+        result = sp.root(num, 3)
+        return f"∛{num} = {result}"
+    
     def check_templates(self, question: str) -> Tuple[Optional[str], float, str]:
+        """التحقق من القوالب"""
         for template_name, template in self.templates.items():
             try:
                 match = re.search(template['pattern'], question, re.IGNORECASE | re.UNICODE)
@@ -921,6 +1117,7 @@ class MathIntentEngine:
         return None, 0.0, None
     
     def safe_parse(self, expr_str: str) -> Optional[sp.Expr]:
+        """تحليل آمن للتعبير"""
         try:
             expr_str = expr_str.replace('^', '**').replace(' ', '')
             variables = self._extract_variables(expr_str)
@@ -943,10 +1140,12 @@ class MathIntentEngine:
             return None
     
     def _extract_variables(self, expr_str: str) -> Set[str]:
+        """استخراج المتغيرات"""
         pattern = r'\b[a-zA-Z]\b'
         return set(re.findall(pattern, expr_str))
     
     def detect_intent(self, question: str) -> Tuple[str, float]:
+        """كشف نية السؤال"""
         q = question.lower().strip()
         scores = {}
         
@@ -962,6 +1161,7 @@ class MathIntentEngine:
         return best_intent, min(scores[best_intent] / 5.0, 1.0)
     
     def extract_expression(self, question: str, intent: str) -> str:
+        """استخراج التعبير الرياضي"""
         q = question
         
         if intent in self.keywords:
@@ -1010,36 +1210,43 @@ class MathIntentEngine:
         return result["result"]
     
     def _handle_factor(self, expr_str: str) -> Optional[str]:
+        """معالجة التحليل"""
         result = self.step_solver.solve_with_steps("", "factor", expr_str)
         return result["result"]
     
     def _handle_expand(self, expr_str: str) -> Optional[str]:
+        """معالجة النشر"""
         result = self.step_solver.solve_with_steps("", "expand", expr_str)
         return result["result"]
     
     def _handle_simplify(self, expr_str: str) -> Optional[str]:
+        """معالجة التبسيط"""
         result = self.step_solver.solve_with_steps("", "simplify", expr_str)
         return result["result"]
     
     def _handle_sum(self, expr_str: str) -> Optional[str]:
+        """معالجة المجموع"""
         expr = self.safe_parse(expr_str)
         if expr is None:
             return None
         return f"**النتيجة:** {expr}"
     
     def _handle_product(self, expr_str: str) -> Optional[str]:
+        """معالجة الجداء"""
         expr = self.safe_parse(expr_str)
         if expr is None:
             return None
         return f"**النتيجة:** {expr}"
     
     def _handle_inequality(self, expr_str: str) -> Optional[str]:
+        """معالجة المتباينات"""
         expr = self.safe_parse(expr_str)
         if expr is None:
             return None
         return f"**النتيجة:** {expr}"
     
     def _handle_absolute(self, expr_str: str, question: str) -> Optional[str]:
+        """معالجة القيمة المطلقة"""
         expr = self.safe_parse(expr_str)
         if expr is None:
             return None
@@ -1047,10 +1254,12 @@ class MathIntentEngine:
         return f"**القيمة المطلقة:** |{expr_str}| = {result}"
     
     def _handle_system(self, expr_str: str, question: str) -> Optional[str]:
+        """معالجة أنظمة المعادلات"""
         result = self.step_solver.solve_with_steps(question, "system", expr_str)
         return result["result"]
     
     def _handle_calculate(self, expr_str: str) -> Optional[str]:
+        """معالجة العمليات الحسابية البسيطة"""
         expr = self.safe_parse(expr_str)
         if expr is None or not expr.is_number:
             return None
@@ -1060,6 +1269,7 @@ class MathIntentEngine:
         return f"**النتيجة:** {result}"
     
     def _handle_generic(self, expr_str: str) -> Optional[str]:
+        """معالج عام"""
         expr = self.safe_parse(expr_str)
         if expr is None:
             return None
@@ -1105,19 +1315,23 @@ class MathIntentEngine:
         return None, base_confidence * 0.5, intent, metadata
 
 # ============================================================
-# 🧠 Root Expression Parser (مختصر)
+# 🧠 Root Expression Parser (محلل الجذور)
 # ============================================================
 
 class RootExpressionParser:
     def __init__(self):
         self.root_patterns = [
             {
-                'pattern': r'(الجذر|جذر)\s+(التربيعي|التكعيبي)\s*(?:للعدد|لعدد)?\s*(\d+)',
+                'pattern': r'(الجذر|جذر)\s+(التربيعي|التكعيبي|الرباعي)\s*(?:للعدد|لعدد)?\s*(\d+)',
                 'handler': self._handle_root
             },
             {
-                'pattern': r'([√∛])\s*(\d+)',
+                'pattern': r'([√∛∜])\s*(\d+)',
                 'handler': self._handle_symbol
+            },
+            {
+                'pattern': r'(\d+)\s*\^\s*\(?1/(\d+)\)?',
+                'handler': self._handle_power
             }
         ]
     
@@ -1125,34 +1339,59 @@ class RootExpressionParser:
         root_type = match.group(2)
         number = int(match.group(3))
         
-        if 'تربيعي' in root_type:
-            result = sp.sqrt(number)
-        else:
-            result = sp.root(number, 3)
+        root_map = {
+            'التربيعي': 2,
+            'التكعيبي': 3,
+            'الرباعي': 4
+        }
+        
+        n = root_map.get(root_type, 2)
+        result = sp.root(number, n)
         
         return {
             'result': result,
-            'decimal': float(result.evalf())
+            'decimal': float(result.evalf()),
+            'root_type': n
         }
     
     def _handle_symbol(self, match):
         symbol = match.group(1)
         number = int(match.group(2))
         
-        if symbol == '√':
-            result = sp.sqrt(number)
-        else:
-            result = sp.root(number, 3)
+        symbol_map = {
+            '√': 2,
+            '∛': 3,
+            '∜': 4
+        }
+        
+        n = symbol_map.get(symbol, 2)
+        result = sp.root(number, n)
         
         return {
             'result': result,
-            'decimal': float(result.evalf())
+            'decimal': float(result.evalf()),
+            'root_type': n
+        }
+    
+    def _handle_power(self, match):
+        number = int(match.group(1))
+        n = int(match.group(2))
+        
+        result = sp.root(number, n)
+        
+        return {
+            'result': result,
+            'decimal': float(result.evalf()),
+            'root_type': n
         }
     
     def format_result(self, result_dict):
+        root_symbols = {2: '√', 3: '∛', 4: '∜'}
+        symbol = root_symbols.get(result_dict['root_type'], '√')
+        
         if result_dict['decimal'].is_integer():
-            return f"**النتيجة:** {int(result_dict['decimal'])}"
-        return f"**النتيجة:** {result_dict['result']} ≈ {result_dict['decimal']:.4f}"
+            return f"**النتيجة:** {symbol}{result_dict['result']} = {int(result_dict['decimal'])}"
+        return f"**النتيجة:** {symbol}{result_dict['result']} ≈ {result_dict['decimal']:.4f}"
     
     def parse(self, text):
         for pattern_info in self.root_patterns:
@@ -1166,7 +1405,7 @@ class RootExpressionParser:
         return {'success': False}
 
 # ============================================================
-# 💾 CacheDB (مختصر)
+# 💾 CacheDB (نظام التخزين المؤقت)
 # ============================================================
 
 class CacheDB:
