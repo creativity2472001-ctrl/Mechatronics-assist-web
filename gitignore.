@@ -10,11 +10,11 @@ ENV/
 env.bak/
 venv.bak/
 
-# المفاتيح السرية
+# Environment
 .env
 *.env
-.keys
-*.key
+.env.local
+.env.production
 
 # IDE
 .vscode/
@@ -22,16 +22,11 @@ venv.bak/
 *.swp
 *.swo
 
-# ملفات التشغيل المؤقتة
-run.bat
-run.sh
-start.sh
+# Logs
+*.log
+app.log
+cache.db
+cache.db-journal
 
-# مجلدات التخزين
-static/uploads/
-static/cache/
-temp/
-
-# ملفات النظام
-Thumbs.db
-.DS_Store
+# Render
+render.yaml  # إذا أردت إبقاءه محلياً فقط
