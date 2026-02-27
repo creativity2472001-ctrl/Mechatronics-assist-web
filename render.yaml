@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: mechatronics-assistant
+    runtime: python
+    repo: https://github.com/yourusername/mechatronics-assistant
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: ENVIRONMENT
+        value: production
+      - key: MAX_QUESTION_LENGTH
+        value: 2000
+      - key: CODE_TIMEOUT
+        value: 3
+      - key: RATE_LIMIT_FREE
+        value: 10/minute
+      - key: AI_DAILY_LIMIT_FREE
+        value: 5
+      - key: PARALLEL_API_TIMEOUT
+        value: 8
+    healthCheckPath: /api/health
+    autoDeploy: true
