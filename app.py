@@ -45,7 +45,7 @@ from prometheus_client import Counter, Histogram, Gauge
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-import aioredis
+import redis
 from aiosqlite import connect as async_sqlite_connect
 import asyncio
 from concurrent.futures import TimeoutError
