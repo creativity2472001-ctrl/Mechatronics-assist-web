@@ -38,7 +38,8 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.security import APIKeyHeader
 import uvicorn
 import google.generativeai as genai
-from pydantic import BaseModel, Field, validator, BaseSettings
+from pydantic import BaseModel, Field, validator
+from pydantic_settings import BaseSettings
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import Counter, Histogram, Gauge
 from slowapi import Limiter, _rate_limit_exceeded_handler
