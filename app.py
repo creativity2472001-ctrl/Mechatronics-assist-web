@@ -2,533 +2,886 @@
 # -*- coding: utf-8 -*-
 
 """
-Mechatronics Assistant - النسخة الاحترافية النهائية
-يدعم: Gemini, DeepSeek, OpenRouter مع Code Execution
+Mechatronics Assistant - الإصدار النهائي المحسن بالكامل v7.0
+يدعم: Async, Redis, XSS Protection, Environment Variables, Docker Ready
 """
 
-from flask import Flask, render_template, request, jsonify
 import os
 import sys
 import logging
 import traceback
 import re
-from typing import Optional, Dict, Any
-from datetime import datetime
+import signal
+import json
+import time
+import hashlib
+import asyncio
+import html
+from datetime import datetime, timedelta
+from typing import Optional, Dict, Any, Tuple, List, Union
+from functools import lru_cache, wraps
+from dataclasses import dataclass
+from enum import Enum
+from concurrent.futures import ThreadPoolExecutor
+import threading
 
-# تكوين التسجيل
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('app.log'),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-logger = logging.getLogger(__name__)
+from flask import Flask, render_template, request, jsonify, g, render_template_string
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from dotenv import load_dotenv
+import redis
+from redis import Redis
+
+# ============================================================
+# 📦 تحميل المتغيرات البيئية مع دعم multiple .env files
+# ============================================================
+
+# تحميل .env العام أولاً
+load_dotenv('.env')
+
+# ثم تحميل .env.local إذا وجد (للتطوير المحلي)
+load_dotenv('.env.local', override=True)
+
+# ثم تحميل .env.production إذا وجد (للإنتاج)
+if os.getenv('FLASK_ENV') == 'production':
+    load_dotenv('.env.production', override=True)
+
+# ============================================================
+# 📊 إعدادات التطبيق من المتغيرات البيئية
+# ============================================================
+
+class Config:
+    """فئة الإعدادات المركزية من المتغيرات البيئية"""
+    
+    # التطبيق
+    SECRET_KEY = os.getenv('SECRET_KEY', os.urandom(24).hex())
+    DEBUG = os.getenv('FLASK_DEBUG', '0') == '1'
+    ENV = os.getenv('FLASK_ENV', 'development')
+    PORT = int(os.getenv('PORT', '5000'))
+    HOST = os.getenv('HOST', '127.0.0.1')
+    
+    # مفاتيح API
+    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+    DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY')
+    OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
+    GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
+    
+    # Redis
+    REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+    REDIS_ENABLED = os.getenv('REDIS_ENABLED', 'true').lower() == 'true'
+    
+    # Cache
+    CACHE_TTL = int(os.getenv('CACHE_TTL', '3600'))
+    CACHE_MAX_SIZE = int(os.getenv('CACHE_MAX_SIZE', '1000'))
+    
+    # Rate Limiting
+    RATE_LIMIT_DEFAULT = os.getenv('RATE_LIMIT_DEFAULT', '200 per day,50 per hour')
+    RATE_LIMIT_ASK = os.getenv('RATE_LIMIT_ASK', '10 per minute')
+    RATE_LIMIT_EXECUTE = os.getenv('RATE_LIMIT_EXECUTE', '5 per minute')
+    
+    # Code Execution
+    CODE_TIMEOUT = int(os.getenv('CODE_TIMEOUT', '3'))
+    CODE_MEMORY_LIMIT = int(os.getenv('CODE_MEMORY_LIMIT', '100'))  # MB
+    CODE_MAX_LOOP_ITERATIONS = int(os.getenv('CODE_MAX_LOOP_ITERATIONS', '10000'))
+    
+    # Security
+    MAX_QUESTION_LENGTH = int(os.getenv('MAX_QUESTION_LENGTH', '5000'))
+    ALLOWED_DOMAINS = os.getenv('ALLOWED_DOMAINS', 'رياضيات,فيزياء,ميكانيكا,كهرباء,PLC').split(',')
+    
+    # Logging
+    LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+    LOG_FILE = os.getenv('LOG_FILE', 'app.log')
+    LOG_JSON = os.getenv('LOG_JSON', 'true').lower() == 'true'
+    
+    @classmethod
+    def is_api_available(cls, api_name: str) -> bool:
+        """التحقق من توفر API"""
+        key_map = {
+            'gemini': cls.GEMINI_API_KEY,
+            'deepseek': cls.DEEPSEEK_API_KEY,
+            'openrouter': cls.OPENROUTER_API_KEY,
+            'github': cls.GITHUB_TOKEN,
+        }
+        return bool(key_map.get(api_name.lower()))
+
+config = Config()
+
+# ============================================================
+# 📊 نظام التسجيل المحسن مع دعم JSON
+# ============================================================
+
+class JSONFormatter(logging.Formatter):
+    """تنسيق السجلات بتنسيق JSON"""
+    
+    def format(self, record):
+        log_record = {
+            'timestamp': datetime.utcnow().isoformat(),
+            'level': record.levelname,
+            'logger': record.name,
+            'module': record.module,
+            'function': record.funcName,
+            'line': record.lineno,
+        }
+        
+        # إضافة الرسالة
+        if hasattr(record, 'msg') and record.msg:
+            if isinstance(record.msg, str):
+                log_record['message'] = record.msg
+            else:
+                log_record.update(record.msg)
+        
+        # إضافة الاستثناء إذا وجد
+        if record.exc_info:
+            log_record['exception'] = traceback.format_exception(*record.exc_info)
+        
+        # إضافة أي خصائص إضافية
+        if hasattr(record, 'kwargs'):
+            log_record.update(record.kwargs)
+        
+        return json.dumps(log_record, ensure_ascii=False)
+
+class StructuredLogger:
+    """مسجل منظم مع دعم JSON"""
+    
+    def __init__(self, name: str):
+        self.logger = logging.getLogger(name)
+        self.setup_logging()
+    
+    def setup_logging(self):
+        """إعداد التسجيل"""
+        self.logger.setLevel(getattr(logging, config.LOG_LEVEL))
+        
+        # حذف المعالجات الموجودة
+        self.logger.handlers.clear()
+        
+        # معالج الملف
+        if config.LOG_FILE:
+            file_handler = logging.FileHandler(config.LOG_FILE, encoding='utf-8')
+            if config.LOG_JSON:
+                file_handler.setFormatter(JSONFormatter())
+            else:
+                file_handler.setFormatter(logging.Formatter(
+                    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+                ))
+            self.logger.addHandler(file_handler)
+        
+        # معالج الكونسول
+        console_handler = logging.StreamHandler(sys.stdout)
+        if config.LOG_JSON:
+            console_handler.setFormatter(JSONFormatter())
+        else:
+            console_handler.setFormatter(logging.Formatter(
+                '%(asctime)s - %(levelname)s - %(message)s'
+            ))
+        self.logger.addHandler(console_handler)
+    
+    def _log(self, level: int, message: str, **kwargs):
+        """تسجيل مع بيانات إضافية"""
+        if config.LOG_JSON:
+            # للـ JSON، نخزن البيانات في record
+            extra = {'kwargs': kwargs}
+            self.logger.log(level, message, extra=extra)
+        else:
+            # للـ text العادي
+            if kwargs:
+                extra_info = ' | '.join(f'{k}={v}' for k, v in kwargs.items())
+                self.logger.log(level, f"{message} | {extra_info}")
+            else:
+                self.logger.log(level, message)
+    
+    def info(self, message: str, **kwargs):
+        self._log(logging.INFO, message, **kwargs)
+    
+    def error(self, message: str, **kwargs):
+        self._log(logging.ERROR, message, **kwargs)
+    
+    def warning(self, message: str, **kwargs):
+        self._log(logging.WARNING, message, **kwargs)
+    
+    def debug(self, message: str, **kwargs):
+        self._log(logging.DEBUG, message, **kwargs)
+
+logger = StructuredLogger(__name__)
+
+# ============================================================
+# 🔧 إعدادات Flask
+# ============================================================
 
 app = Flask(__name__)
-app.config['JSON_AS_ASCII'] = False  # لدعم العربية
-app.config['SECRET_KEY'] = os.urandom(24)
+app.config['SECRET_KEY'] = config.SECRET_KEY
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+app.config['JSON_AS_ASCII'] = False
 
 # ============================================================
-# 🔑 نظام المفاتيح (من CMD فقط)
+# 🚦 Rate Limiting مع دعم Redis
 # ============================================================
 
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
-DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY')
-OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY')
-
-# ============================================================
-# 📊 عرض حالة المفاتيح (للمطور فقط)
-# ============================================================
-
-print("\n" + "="*70)
-print("🚀 MECHATRONICS ASSISTANT - النسخة الاحترافية النهائية")
-print("="*70)
-
-if GEMINI_API_KEY:
-    print(f"✅ Gemini: متصل (مفتاح: {GEMINI_API_KEY[:8]}...)")
-else:
-    print("❌ Gemini: غير متصل")
-
-if DEEPSEEK_API_KEY:
-    print(f"✅ DeepSeek: متصل (مفتاح: {DEEPSEEK_API_KEY[:8]}...)")
-else:
-    print("❌ DeepSeek: غير متصل")
-
-if OPENROUTER_API_KEY:
-    print(f"✅ OpenRouter: متصل (مفتاح: {OPENROUTER_API_KEY[:8]}...)")
-else:
-    print("❌ OpenRouter: غير متصل")
-
-print("="*70 + "\n")
-
-# ============================================================
-# 🧠 نظام كشف المجال الذكي (بدون كلمات مفتاحية)
-# ============================================================
-
-def detect_domain(question: str) -> tuple:
-    """
-    كشف المجال من السؤال نفسه دون الحاجة لكلمات مفتاحية
-    """
-    if not question:
-        return False, None
-    
-    q = question
-    q_lower = question.lower()
-    
-    # ============================================================
-    # 📐 كشف الرياضيات
-    # ============================================================
-    math_patterns = [
-        # رموز رياضية
-        r'[∫∑∏√∞πθφωαβγ∂∇∈∉⊂⊃∩∪≈≠≤≥±∓·×÷°′″]',
-        # دوال مثلثية
-        r'sin|cos|tan|cot|sec|csc',
-        r'arcsin|arccos|arctan',
-        # لوغاريتمات
-        r'log|ln|lg|e\^|exp',
-        # تفاضل وتكامل
-        r'diff|derivative|مشتقة',
-        r'int|integral|تكامل',
-        # نهايات
-        r'lim|limit|نهاية',
-        # معادلات
-        r'x\s*[\+\-\*\/]\s*\d+',
-        r'\d+\s*[\+\-\*\/]\s*x',
-        r'x\^\d',
-        r'[a-z]\s*\*\s*\d+',
-        r'=\s*[\d\-]+',
-        # مصفوفات
-        r'\[\s*\[.*\]\s*\]',
-        r'matrix|مصفوفة|det|محدد',
-        # أعداد مركبة
-        r'i\s*[\+\-\*\/]|complex|مركب',
-        # متسلسلات
-        r'sum|∑|product|∏',
-        # إحصاء
-        r'mean|average|متوسط|variance|تباين|std|انحراف',
-    ]
-    
-    for pattern in math_patterns:
-        if re.search(pattern, q, re.IGNORECASE):
-            return True, "رياضيات"
-    
-    # ============================================================
-    # ⚡ كشف الفيزياء
-    # ============================================================
-    physics_patterns = [
-        # قوانين أساسية
-        r'f\s*=\s*m\s*\*?\s*a',
-        r'v\s*=\s*d/t',
-        r'p\s*=\s*m\s*\*?\s*v',
-        r'e\s*=\s*m\s*\*?\s*c\^2',
-        # وحدات
-        r'newton|نيوتن|n',
-        r'joule|جول|j',
-        r'watt|واط|w',
-        r'pascal|باسكال|pa',
-        # مفاهيم
-        r'force|قوة',
-        r'mass|كتلة',
-        r'acceleration|تسارع',
-        r'velocity|سرعة',
-        r'gravity|جاذبية|9\.8',
-        r'light|ضوء|3e8|c\s*=',
-        r'energy|طاقة',
-        r'work|شغل',
-        r'power|قدرة',
-        r'pressure|ضغط',
-        r'density|كثافة',
-        r'wave|موجة|frequency|تردد',
-        r'sound|صوت',
-        r'electric|كهرباء|charge|شحنة',
-        r'magnetic|مغناطيس|field|مجال',
-        r'quantum|كم',
-    ]
-    
-    for pattern in physics_patterns:
-        if re.search(pattern, q, re.IGNORECASE):
-            return True, "فيزياء"
-    
-    # ============================================================
-    # 🔧 كشف الميكانيكا
-    # ============================================================
-    mechanics_patterns = [
-        # إجهاد وانفعال
-        r'stress|إجهاد',
-        r'strain|انفعال',
-        r'young|يونج|modulus|معامل',
-        # عناصر ميكانيكية
-        r'beam|عارضة',
-        r'torque|عزم',
-        r'gear|ترس',
-        r'spring|نابض|زنبرك',
-        r'pulley|بكرة',
-        r'lever|رافعة',
-        # حركة
-        r'vibration|اهتزاز',
-        r'fatigue|كلل',
-        r'fluid|مائع',
-        r'pump|مضخة',
-        r'turbine|عنفة',
-        r'piston|مكبس',
-        r'cylinder|أسطوانة',
-        # ديناميكا
-        r'kinematics|حركيات',
-        r'dynamics|ديناميكا',
-        r'statics|ستاتيكا',
-        r'equilibrium|توازن',
-    ]
-    
-    for pattern in mechanics_patterns:
-        if re.search(pattern, q, re.IGNORECASE):
-            return True, "ميكانيكا"
-    
-    # ============================================================
-    # 💡 كشف الكهرباء والإلكترونيات
-    # ============================================================
-    electrical_patterns = [
-        # قوانين أساسية
-        r'v\s*=\s*i\s*\*?\s*r',
-        r'p\s*=\s*v\s*\*?\s*i',
-        # وحدات
-        r'ohm|أوم',
-        r'volt|فولت|v',
-        r'amp|أمبير|a',
-        r'farad|فاراد|f',
-        r'henry|هنري|h',
-        # عناصر
-        r'resistor|مقاومة',
-        r'capacitor|مكثف',
-        r'inductor|ملف',
-        r'diode|دايود',
-        r'transistor|ترانزستور',
-        r'op[- ]?amp|مكبر',
-        # دوائر
-        r'circuit|دائرة',
-        r'arduino|raspberry',
-        r'sensor|حساس|مستشعر',
-        r'led|ضوء',
-        r'power supply|مصدر طاقة',
-        r'battery|بطارية',
-        # إشارات
-        r'frequency|تردد',
-        r'filter|مرشح',
-        r'amplifier|مضخم',
-        r'digital|رقمي',
-        r'analog|تناظري',
-        r'signal|إشارة',
-        r'pwm|تعديل',
-    ]
-    
-    for pattern in electrical_patterns:
-        if re.search(pattern, q, re.IGNORECASE):
-            return True, "كهرباء وإلكترونيات"
-    
-    # ============================================================
-    # 🤖 كشف PLC والمحركات
-    # ============================================================
-    plc_patterns = [
-        # PLC
-        r'plc',
-        r'ladder|سلم',
-        r'logic|منطق',
-        # محركات
-        r'motor|محرك',
-        r'servo|سيرفو',
-        r'stepper|ستبير',
-        r'actuator|مشغل',
-        # تحكم
-        r'control|تحكم',
-        r'pid',
-        r'feedback|تغذية عكسية',
-        # صناعة
-        r'industrial|صناعي',
-        r'automation|أتمتة',
-        r'conveyor|ناقل',
-        r'robotics|روبوت',
-        r'scada',
-        r'hmi',
-        # حساسات
-        r'encoder|مشفّر',
-        r'proximity|قرب',
-    ]
-    
-    for pattern in plc_patterns:
-        if re.search(pattern, q, re.IGNORECASE):
-            return True, "PLC ومحركات"
-    
-    return False, None
-
-# ============================================================
-# 🤖 دوال الذكاء الاصطناعي (مع التبديل التلقائي)
-# ============================================================
-
-def ask_gemini(question: str) -> Optional[str]:
-    """Gemini مع Code Execution"""
-    if not GEMINI_API_KEY:
-        return None
-    
+# إعداد مخزن Rate Limiting
+if config.REDIS_ENABLED:
     try:
-        import google.generativeai as genai
-        from google.generativeai.types import Tool
-        
-        genai.configure(api_key=GEMINI_API_KEY)
-        
-        code_execution_tool = Tool(
-            function_declarations=[{
-                "name": "execute_python",
-                "description": "Execute Python code for mathematical calculations",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "code": {
-                            "type": "string",
-                            "description": "Python code to execute"
-                        }
-                    },
-                    "required": ["code"]
-                }
-            }]
-        )
-        
-        model = genai.GenerativeModel(
-            model_name='models/gemini-2.0-flash-001',
-            tools=[code_execution_tool]
-        )
-        
-        logger.info(f"Sending question to Gemini: {question[:100]}...")
-        
-        response = model.generate_content(
-            question,
-            generation_config={
-                'temperature': 0.1,
-                'max_output_tokens': 4096
-            }
-        )
-        
-        return response.text
-        
-    except ImportError:
-        logger.error("google-generativeai not installed")
-        return None
-    except Exception as e:
-        logger.error(f"Gemini error: {str(e)}")
-        return None
+        rate_limit_storage = f"redis://{config.REDIS_URL}"
+        logger.info("✅ Rate Limiting using Redis")
+    except:
+        rate_limit_storage = "memory://"
+        logger.warning("⚠️ Rate Limiting using memory (Redis not available)")
+else:
+    rate_limit_storage = "memory://"
+    logger.info("ℹ️ Rate Limiting using memory (as configured)")
 
-def ask_deepseek(question: str) -> Optional[str]:
-    """DeepSeek مع Tool Calling"""
-    if not DEEPSEEK_API_KEY:
-        return None
-    
-    try:
-        from openai import OpenAI
-        
-        client = OpenAI(
-            api_key=DEEPSEEK_API_KEY,
-            base_url="https://api.deepseek.com/v1"
-        )
-        
-        tools = [{
-            "type": "function",
-            "function": {
-                "name": "run_python",
-                "description": "Execute Python code for calculations",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "code": {
-                            "type": "string",
-                            "description": "Python code to execute"
-                        }
-                    },
-                    "required": ["code"]
-                }
-            }
-        }]
-        
-        logger.info(f"Sending question to DeepSeek: {question[:100]}...")
-        
-        response = client.chat.completions.create(
-            model="deepseek-chat",
-            messages=[
-                {"role": "system", "content": "أنت مساعد هندسي متخصص. استخدم Python للحسابات."},
-                {"role": "user", "content": question}
-            ],
-            tools=tools,
-            tool_choice="auto",
-            temperature=0.1,
-            max_tokens=4096
-        )
-        
-        return response.choices[0].message.content
-        
-    except ImportError:
-        logger.error("openai not installed")
-        return None
-    except Exception as e:
-        logger.error(f"DeepSeek error: {str(e)}")
-        return None
-
-def ask_openrouter(question: str) -> Optional[str]:
-    """OpenRouter"""
-    if not OPENROUTER_API_KEY:
-        return None
-    
-    try:
-        from openai import OpenAI
-        
-        client = OpenAI(
-            api_key=OPENROUTER_API_KEY,
-            base_url="https://openrouter.ai/api/v1"
-        )
-        
-        logger.info(f"Sending question to OpenRouter: {question[:100]}...")
-        
-        response = client.chat.completions.create(
-            model="deepseek/deepseek-chat",
-            messages=[
-                {"role": "system", "content": "أنت مساعد هندسي متخصص."},
-                {"role": "user", "content": question}
-            ],
-            temperature=0.1,
-            max_tokens=4096
-        )
-        
-        return response.choices[0].message.content
-        
-    except ImportError:
-        logger.error("openai not installed")
-        return None
-    except Exception as e:
-        logger.error(f"OpenRouter error: {str(e)}")
-        return None
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=[config.RATE_LIMIT_DEFAULT],
+    storage_uri=rate_limit_storage,
+    strategy="fixed-window"
+)
 
 # ============================================================
-# 🎯 نظام التبديل التلقائي (بدون أن يشعر المستخدم)
+# 💾 نظام Cache المتقدم
 # ============================================================
 
-def ask_ai_smart(question: str) -> Optional[str]:
-    """
-    تجربة APIs بالترتيب: Gemini → DeepSeek → OpenRouter
-    بدون أن يشعر المستخدم بأي أخطاء
-    """
-    # قائمة APIs بالترتيب
-    apis = [
-        (ask_gemini, "Gemini"),
-        (ask_deepseek, "DeepSeek"),
-        (ask_openrouter, "OpenRouter")
-    ]
+class CacheManager:
+    """مدير التخزين المؤقت مع دعم Redis والذاكرة المحلية"""
     
-    for api_func, api_name in apis:
+    def __init__(self):
+        self.redis_client = None
+        self.memory_cache = {}
+        self.memory_cache_expiry = {}
+        self.cache_hits = 0
+        self.cache_misses = 0
+        self.lock = threading.Lock()
+        self.setup_redis()
+    
+    def setup_redis(self):
+        """محاولة الاتصال بـ Redis"""
+        if not config.REDIS_ENABLED:
+            logger.info("ℹ️ Redis is disabled by configuration")
+            return
+        
         try:
-            logger.info(f"Trying {api_name}...")
-            result = api_func(question)
-            if result and "خطأ" not in result and "⚠️" not in result:
-                logger.info(f"✅ {api_name} succeeded")
-                return result
+            self.redis_client = redis.from_url(
+                config.REDIS_URL, 
+                decode_responses=True,
+                socket_connect_timeout=2,
+                socket_timeout=2
+            )
+            self.redis_client.ping()
+            logger.info("✅ Redis connected successfully")
         except Exception as e:
-            logger.error(f"{api_name} failed: {str(e)}")
-            continue
+            logger.warning(f"❌ Redis connection failed: {e}")
+            self.redis_client = None
     
-    return None
+    def _get_memory_cache(self, key: str) -> Optional[str]:
+        """استرجاع من الذاكرة المحلية"""
+        with self.lock:
+            if key in self.memory_cache:
+                expiry = self.memory_cache_expiry.get(key, 0)
+                if expiry > time.time():
+                    self.cache_hits += 1
+                    return self.memory_cache[key]
+                else:
+                    # حذف المنتهي
+                    del self.memory_cache[key]
+                    del self.memory_cache_expiry[key]
+        return None
+    
+    def _set_memory_cache(self, key: str, value: str, ttl: int):
+        """تخزين في الذاكرة المحلية"""
+        with self.lock:
+            # التحقق من الحجم
+            if len(self.memory_cache) >= config.CACHE_MAX_SIZE:
+                # حذف الأقدم
+                oldest_key = min(self.memory_cache_expiry.keys(), 
+                               key=lambda k: self.memory_cache_expiry[k])
+                del self.memory_cache[oldest_key]
+                del self.memory_cache_expiry[oldest_key]
+            
+            self.memory_cache[key] = value
+            self.memory_cache_expiry[key] = time.time() + ttl
+    
+    def get(self, key: str) -> Optional[str]:
+        """استرجاع قيمة من cache"""
+        # تجربة Redis أولاً
+        if self.redis_client:
+            try:
+                value = self.redis_client.get(key)
+                if value:
+                    self.cache_hits += 1
+                    return value
+            except Exception as e:
+                logger.error(f"Redis get error", error=str(e))
+        
+        # الرجوع للذاكرة المحلية
+        value = self._get_memory_cache(key)
+        if value:
+            return value
+        
+        self.cache_misses += 1
+        return None
+    
+    def set(self, key: str, value: str, ttl: int = None):
+        """تخزين قيمة في cache"""
+        if ttl is None:
+            ttl = config.CACHE_TTL
+        
+        # تخزين في Redis
+        if self.redis_client:
+            try:
+                self.redis_client.setex(key, ttl, value)
+                return
+            except Exception as e:
+                logger.error(f"Redis set error", error=str(e))
+        
+        # تخزين في الذاكرة المحلية
+        self._set_memory_cache(key, value, ttl)
+    
+    def delete(self, key: str):
+        """حذف من cache"""
+        if self.redis_client:
+            try:
+                self.redis_client.delete(key)
+            except:
+                pass
+        
+        with self.lock:
+            self.memory_cache.pop(key, None)
+            self.memory_cache_expiry.pop(key, None)
+    
+    def clear(self):
+        """مسح كل cache"""
+        if self.redis_client:
+            try:
+                self.redis_client.flushdb()
+            except:
+                pass
+        
+        with self.lock:
+            self.memory_cache.clear()
+            self.memory_cache_expiry.clear()
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """إحصائيات cache"""
+        total = self.cache_hits + self.cache_misses
+        hit_rate = (self.cache_hits / total * 100) if total > 0 else 0
+        
+        return {
+            "hits": self.cache_hits,
+            "misses": self.cache_misses,
+            "hit_rate": round(hit_rate, 2),
+            "memory_size": len(self.memory_cache),
+            "redis_connected": self.redis_client is not None,
+            "max_size": config.CACHE_MAX_SIZE
+        }
+
+cache = CacheManager()
+
+def cached(key_prefix: str = "", ttl: int = None):
+    """Decorator للتخزين المؤقت"""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            # إنشاء مفتاح فريد
+            key_data = f"{key_prefix}:{func.__name__}:{str(args)}:{str(kwargs)}"
+            key = hashlib.md5(key_data.encode()).hexdigest()
+            
+            # محاولة استرجاع من cache
+            cached_value = cache.get(key)
+            if cached_value:
+                return json.loads(cached_value)
+            
+            # تنفيذ الدالة
+            result = func(*args, **kwargs)
+            
+            # تخزين النتيجة
+            if result:
+                cache.set(key, json.dumps(result, ensure_ascii=False), ttl)
+            
+            return result
+        return wrapper
+    return decorator
 
 # ============================================================
-# 🎯 المسارات الرئيسية
+# 🔑 نظام المفاتيح مع التحقق
 # ============================================================
 
-@app.route('/')
-def home():
-    """الصفحة الرئيسية"""
-    return render_template('index.html')
+class APIKeys:
+    """إدارة والتحقق من مفاتيح API"""
+    
+    def __init__(self):
+        self.keys = {
+            'gemini': config.GEMINI_API_KEY,
+            'deepseek': config.DEEPSEEK_API_KEY,
+            'openrouter': config.OPENROUTER_API_KEY,
+            'github': config.GITHUB_TOKEN,
+        }
+        self.validate_all()
+    
+    def validate(self, key_name: str) -> bool:
+        """التحقق من مفتاح معين"""
+        key = self.keys.get(key_name)
+        return bool(key and len(key) > 10)
+    
+    def validate_all(self):
+        """التحقق من جميع المفاتيح"""
+        for key_name, key_value in self.keys.items():
+            if key_value and len(key_value) > 10:
+                logger.info(f"✅ {key_name}: متصل")
+            else:
+                logger.warning(f"❌ {key_name}: غير متصل")
+    
+    def get(self, key_name: str) -> Optional[str]:
+        return self.keys.get(key_name)
+    
+    def get_available_apis(self) -> List[str]:
+        """قائمة APIs المتاحة"""
+        return [name for name in self.keys if self.validate(name)]
+    
+    def has_any(self) -> bool:
+        return bool(self.get_available_apis())
 
-@app.route('/api/ask', methods=['POST'])
-def ask():
-    """API الإجابة على الأسئلة"""
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"success": False, "error": "طلب غير صالح"}), 400
+api_keys = APIKeys()
+
+# ============================================================
+# ⚠️ الأخطاء المخصصة
+# ============================================================
+
+class APIError(Exception):
+    """خطأ في API"""
+    pass
+
+class SecurityError(Exception):
+    """خطأ أمني"""
+    pass
+
+class TimeoutError(Exception):
+    """خطأ timeout"""
+    pass
+
+class ValidationError(Exception):
+    """خطأ في التحقق"""
+    pass
+
+# ============================================================
+# 📝 System Prompts
+# ============================================================
+
+SYSTEM_PROMPTS = {
+    'default': """
+أنت مساعد هندسي متخصص في الرياضيات والفيزياء والميكانيكا والكهرباء والإلكترونيات.
+
+قواعد صارمة:
+1. أي عملية رياضية (حل معادلة، تكامل، مشتقة، نهاية) يجب تنفيذها باستخدام Python + SymPy فقط
+2. لا تحسب أي شيء ذهنياً أبداً
+3. اتبع الخطوات الأربع بدقة:
+   - تحليل المسألة
+   - تعريف المتغيرات
+   - الحل باستخدام SymPy
+   - التحقق من النتيجة
+""",
+    'math': """
+أنت خبير رياضيات. استخدم SymPy للحلول الرياضية بدقة.
+""",
+    'physics': """
+أنت خبير فيزياء. استخدم القوانين الفيزيائية بدقة مع الوحدات المناسبة.
+"""
+}
+
+# ============================================================
+# ⚙️ نظام تنفيذ Python الآمن المحسن
+# ============================================================
+
+class Domain(Enum):
+    """المجالات المدعومة"""
+    MATH = "رياضيات"
+    PHYSICS = "فيزياء"
+    MECHANICS = "ميكانيكا"
+    ELECTRICAL = "كهرباء"
+    PLC = "PLC"
+    UNKNOWN = "غير معروف"
+
+@dataclass
+class ExecutionResult:
+    """نتيجة تنفيذ الكود"""
+    success: bool
+    result: Optional[str] = None
+    error: Optional[str] = None
+    execution_time: float = 0.0
+    memory_used: Optional[float] = None
+
+class CodeAnalyzer:
+    """محلل الكود للكشف عن الأنماط الخطيرة"""
+    
+    # الأنماط الخطيرة
+    DANGEROUS_PATTERNS = [
+        (r'while\s+True|while\s+1\s*:|while\s*\(\s*True\s*\)', 'حلقة لا نهائية'),
+        (r'__import__\s*\(', 'استيراد ديناميكي'),
+        (r'eval\s*\(|exec\s*\(|compile\s*\(', 'تنفيذ كود ديناميكي'),
+        (r'open\s*\(|file\s*\(|os\.remove|os\.unlink', 'عمليات ملفات'),
+        (r'__builtins__|globals\s*\(|locals\s*\(|vars\s*\(', 'الوصول للبيئة'),
+        (r'os\.|sys\.|subprocess|socket|requests|urllib', 'مكتبات النظام'),
+        (r'__[a-zA-Z0-9_]+__', 'الوصول للدوال الخاصة'),
+        (r'getattr|setattr|delattr', 'تعديل السمات'),
+        (r'__base__|__class__|__mro__', 'الوصول للـ metaclass'),
+    ]
+    
+    def __init__(self, max_iterations: int = 10000):
+        self.max_iterations = max_iterations
+    
+    def analyze(self, code: str) -> Tuple[bool, str, Dict[str, Any]]:
+        """
+        تحليل الكود
+        returns: (is_dangerous, reason, details)
+        """
+        details = {
+            'lines': len(code.split('\n')),
+            'chars': len(code),
+            'has_loops': False,
+            'has_functions': False,
+            'estimated_iterations': 0
+        }
         
-        question = data.get('question', '').strip()
-        language = data.get('language', 'ar')
+        # فحص الأنماط الخطيرة
+        for pattern, reason in self.DANGEROUS_PATTERNS:
+            if re.search(pattern, code, re.IGNORECASE):
+                return True, f"⚠️ كود خطر: {reason}", details
         
+        # فحص الحلقات الكبيرة
+        loop_patterns = [
+            (r'for\s+\w+\s+in\s+range\s*\(\s*(\d+)\s*\)', 'range loop'),
+            (r'for\s+\w+\s+in\s+range\s*\(\s*\w+\s*\)', 'variable range'),
+            (r'while\s+[^:]+:', 'while loop'),
+        ]
+        
+        for pattern, loop_type in loop_patterns:
+            matches = re.findall(pattern, code)
+            if matches:
+                details['has_loops'] = True
+                if loop_type == 'range loop' and matches[0].isdigit():
+                    iterations = int(matches[0])
+                    details['estimated_iterations'] = max(
+                        details['estimated_iterations'], 
+                        iterations
+                    )
+                    if iterations > self.max_iterations:
+                        return True, f"⚠️ حلقة كبيرة جداً ({iterations} > {self.max_iterations})", details
+        
+        # فحص الحلقات المتداخلة
+        nested_loops = len(re.findall(r'for\s+\w+\s+in', code))
+        if nested_loops > 3:
+            return True, f"⚠️ تداخل حلقات كبير ({nested_loops} مستويات)", details
+        
+        # فحص الدوال
+        if re.search(r'def\s+\w+\s*\(', code):
+            details['has_functions'] = True
+        
+        return False, "", details
+
+class SafeExecutor:
+    """منفذ كود Python آمن مع حدود صارمة"""
+    
+    # المكتبات المسموحة
+    ALLOWED_LIBS = {
+        "math": __import__("math"),
+        "sympy": __import__("sympy"),
+        "numpy": __import__("numpy"),
+        "cmath": __import__("cmath"),
+        "itertools": __import__("itertools"),
+        "functools": __import__("functools"),
+        "collections": __import__("collections"),
+        "random": __import__("random"),
+        "decimal": __import__("decimal"),
+        "fractions": __import__("fractions"),
+    }
+    
+    # الدوال المسموحة
+    SAFE_BUILTINS = {
+        'print': print, 'range': range, 'len': len,
+        'int': int, 'float': float, 'str': str,
+        'list': list, 'dict': dict, 'tuple': tuple,
+        'set': set, 'bool': bool, 'abs': abs,
+        'round': round, 'pow': pow, 'sum': sum,
+        'min': min, 'max': max, 'enumerate': enumerate,
+        'zip': zip, 'sorted': sorted, 'reversed': reversed,
+        'all': all, 'any': any, 'chr': chr, 'ord': ord,
+        'hex': hex, 'oct': oct, 'bin': bin,
+        'open': None, '__import__': None, 'help': None,
+    }
+    
+    def __init__(self):
+        self.analyzer = CodeAnalyzer(max_iterations=config.CODE_MAX_LOOP_ITERATIONS)
+        self.executor = ThreadPoolExecutor(max_workers=4)
+    
+    def set_resource_limits(self):
+        """تحديد حدود الموارد"""
+        try:
+            # حد الذاكرة
+            memory_bytes = config.CODE_MEMORY_LIMIT * 1024 * 1024
+            resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
+            
+            # حد CPU
+            resource.setrlimit(resource.RLIMIT_CPU, (config.CODE_TIMEOUT, config.CODE_TIMEOUT + 1))
+        except Exception as e:
+            logger.warning(f"Could not set resource limits", error=str(e))
+    
+    def timeout_handler(self, signum, frame):
+        """معالج timeout"""
+        raise TimeoutError(f"⏱️ تجاوز الوقت المسموح به ({config.CODE_TIMEOUT} ثوان)")
+    
+    def _execute_sync(self, code: str, env: Dict) -> Tuple[Any, float]:
+        """تنفيذ متزامن مع حدود"""
+        start_time = time.time()
+        
+        # تعيين حدود الموارد
+        self.set_resource_limits()
+        
+        # إعداد signal للـ timeout
+        signal.signal(signal.SIGALRM, self.timeout_handler)
+        signal.alarm(config.CODE_TIMEOUT)
+        
+        try:
+            local_env = {}
+            exec(code, env, local_env)
+            signal.alarm(0)
+            
+            result = local_env.get("result", local_env.get("ans", "✅ تم التنفيذ بنجاح"))
+            return result, time.time() - start_time
+            
+        except Exception as e:
+            signal.alarm(0)
+            raise e
+    
+    async def execute_async(self, code: str) -> ExecutionResult:
+        """تنفيذ الكود بشكل غير متزامن"""
+        start_time = time.time()
+        
+        # تحليل الكود أولاً
+        dangerous, reason, details = self.analyzer.analyze(code)
+        if dangerous:
+            return ExecutionResult(
+                success=False,
+                error=reason,
+                execution_time=time.time() - start_time
+            )
+        
+        # إعداد بيئة التنفيذ
+        exec_env = {
+            "__builtins__": self.SAFE_BUILTINS,
+            **self.ALLOWED_LIBS
+        }
+        
+        try:
+            # تنفيذ في ThreadPool
+            loop = asyncio.get_event_loop()
+            result, exec_time = await loop.run_in_executor(
+                self.executor,
+                self._execute_sync,
+                code,
+                exec_env
+            )
+            
+            return ExecutionResult(
+                success=True,
+                result=self._sanitize_output(str(result)),
+                execution_time=exec_time
+            )
+            
+        except TimeoutError as e:
+            return ExecutionResult(
+                success=False,
+                error=str(e),
+                execution_time=time.time() - start_time
+            )
+        except Exception as e:
+            return ExecutionResult(
+                success=False,
+                error=f"❌ خطأ في التنفيذ: {str(e)}",
+                execution_time=time.time() - start_time
+            )
+    
+    def _sanitize_output(self, output: str) -> str:
+        """تنظيف المخرجات من الأكواد الضارة"""
+        # إزالة أي HTML
+        output = html.escape(output)
+        # تحديد الطول
+        if len(output) > 10000:
+            output = output[:10000] + "... (تم اقتطاع النتيجة)"
+        return output
+
+safe_executor = SafeExecutor()
+
+# ============================================================
+# 🧹 Preprocessing للأسئلة
+# ============================================================
+
+def preprocess_question(question: str) -> str:
+    """تنظيف وتوحيد السؤال"""
+    if not question:
+        return ""
+    
+    q = question.strip()
+    
+    # استبدال الرموز
+    replacements = {
+        '×': '*', '÷': '/', '^': '**', '−': '-',
+        '＝': '=', '≈': '≈', '≠': '!=',
+        '≤': '<=', '≥': '>=', 'π': 'pi',
+        '∞': 'oo', '∫': 'integrate', '∑': 'summation',
+        '√': 'sqrt', '∛': 'cbrt', '∜': '**0.25',
+        '∈': 'in', '∉': 'not in', '∩': '&', '∪': '|',
+        '⊂': '<', '⊃': '>', '⊆': '<=', '⊇': '>=',
+        '∠': 'angle', '∥': 'parallel', '⊥': 'perp',
+        '°': 'degrees', '℃': 'C', '℉': 'F'
+    }
+    
+    for old, new in replacements.items():
+        q = q.replace(old, new)
+    
+    # تنظيف المسافات
+    q = ' '.join(q.split())
+    
+    return q
+
+# ============================================================
+# 🧠 نظام كشف المجال المحسن
+# ============================================================
+
+class DomainDetector:
+    """كاشف المجال مع نظام نقاط متقدم"""
+    
+    # أنماط المجالات مع النقاط
+    DOMAIN_PATTERNS = {
+        Domain.MATH: [
+            (r'معادلة|equation|solve|حل', 2),
+            (r'مشتقة|تكامل|نهاية|diff|integral|limit', 4),
+            (r'مصفوفة|matrix|determinant|محدد|inverse|معكوس', 3),
+            (r'احتمال|probability|statistics|إحصاء|متوسط|mean', 3),
+            (r'sin|cos|tan|log|ln|exp|جيب|جتا|ظا', 3),
+            (r'\d+\s*[\+\-\*/]\s*\d+', 1),
+            (r'x\^|x\*\*|أس|قوة', 2),
+            (r'∫|∑|√|π|∞|∏|∂', 4),
+            (r'plot|graph|رسم|بياني|منحنى', 2),
+            (r'نظرية|مبرهنة|theorem|proof|برهان', 3),
+        ],
+        
+        Domain.PHYSICS: [
+            (r'f\s*=\s*m\s*a|v\s*=\s*d/t|قوة|كتلة|تسارع', 3),
+            (r'newton|نيوتن|force|mass', 3),
+            (r'9\.8|gravity|جاذبية|ثابت', 2),
+            (r'سرعة|velocity|acceleration|عجلة', 3),
+            (r'طاقة|energy|work|شغل|قدرة|power', 3),
+            (r'ضغط|pressure|كثافة|density|حجم|volume', 2),
+            (r'موجة|wave|تردد|frequency|طول|wavelength', 3),
+            (r'كهرباء|electricity|مغناطيس|magnetic', 2),
+        ],
+        
+        Domain.MECHANICS: [
+            (r'ميكانيكا|mechanics', 4),
+            (r'ذراع|lever|رافعة|pulley|بكرة|عتلة', 3),
+            (r'عزم|torque|moment|عزم', 3),
+            (r'إجهاد|stress|strain|انفعال|مرونة|elastic', 3),
+            (r'ترس|gear|belt|سير|chain|سلسلة|كاوتش', 3),
+            (r'اهتزاز|vibration|ديناميك|حركة|motion', 3),
+            (r'محمل|bearing|عمود|shaft|وصلة|joint', 2),
+        ],
+        
+        Domain.ELECTRICAL: [
+            (r'v\s*=\s*i\s*\*?\s*r|ohm|أوم|فولت|volt', 3),
+            (r'جهد|voltage|تيار|current|مقاومة|resistance', 3),
+            (r'مكثف|capacitor|ملف|inductor|محث', 3),
+            (r'تردد|frequency|hertz|هرتز|موجة|wave', 2),
+            (r'محول|transformer|rectifier|مقوم|diode|دايود', 3),
+            (r'محرك|motor|generator|مولد|دينامو', 3),
+            (r'إلكترونيات|electronics|دائرة|circuit|pcb', 3),
+        ],
+        
+        Domain.PLC: [
+            (r'ladder|ld|ldi|out|tim|cnt|plc', 4),
+            (r'plc|برمجة\s+plc|plc\s+برمجة', 4),
+            (r'hmi|opc|scada|سكادا', 3),
+            (r'relay|contact|coil|مرحل|كونتاكتور', 3),
+            (r'sensor|مستشعر|actuator|مشغل|solenoid|صمام', 3),
+            (r'logix|studio 5000|simatic|step 7|tia portal', 4),
+            (r'إنفرتر|inverter|vfd|soft starter|سوفت ستارتر', 3),
+        ],
+    }
+    
+    def detect(self, question: str) -> Tuple[Domain, float, Dict[str, float]]:
+        """كشف المجال مع نسبة الثقة وتفاصيل النقاط"""
         if not question:
-            return jsonify({"success": False, "error": "السؤال فارغ"}), 400
+            return Domain.UNKNOWN, 0.0, {}
         
-        # 1️⃣ كشف المجال (بدون كلمات مفتاحية)
-        allowed, domain = detect_domain(question)
+        q_lower = question.lower()
+        scores = {domain: 0 for domain in Domain}
+        details = {}
         
-        # 2️⃣ إذا كان خارج المجال → رسالة مناسبة
-        if not allowed:
-            return jsonify({
-                "success": False,
-                "error": "❌ هذا السؤال خارج نطاق التطبيق. التطبيق متخصص في: الرياضيات، الفيزياء، الميكانيكا، الكهرباء، الإلكترونيات، المحركات، PLC",
-                "domain_error": True
-            })
+        # حساب النقاط لكل مجال
+        for domain, patterns in self.DOMAIN_PATTERNS.items():
+            domain_score = 0
+            for pattern, points in patterns:
+                matches = re.findall(pattern, q_lower, re.IGNORECASE)
+                if matches:
+                    domain_score += points * len(matches)
+            scores[domain] = domain_score
+            details[domain.value] = domain_score
         
-        # 3️⃣ تجربة APIs بالترتيب (التبديل التلقائي)
-        answer = ask_ai_smart(question)
+        # المجال الأكثر ترجيحاً
+        max_domain = max(scores, key=scores.get)
+        max_score = scores[max_domain]
+        total_score = sum(scores.values()) or 1
         
-        # 4️⃣ إذا فشلت كل APIs → رسالة عامة
-        if not answer:
-            return jsonify({
-                "success": False,
-                "error": "❌ عذراً، لم نتمكن من الإجابة على سؤالك حالياً. الرجاء المحاولة لاحقاً.",
-                "domain": domain
-            })
+        # حساب نسبة الثقة
+        confidence = max_score / total_score if total_score > 0 else 0
         
-        # 5️⃣ النجاح
-        return jsonify({
-            "success": True,
-            "answer": answer,
-            "domain": domain
-        })
-        
-    except Exception as e:
-        logger.error(f"Error in ask endpoint: {str(e)}")
-        logger.error(traceback.format_exc())
-        return jsonify({
-            "success": False,
-            "error": "❌ حدث خطأ غير متوقع. الرجاء المحاولة لاحقاً."
-        }), 500
+        return max_domain if max_score >= 3 else Domain.UNKNOWN, confidence, details
 
-@app.route('/api/help', methods=['GET'])
-def get_help():
-    """الحصول على المساعدة"""
-    language = request.args.get('lang', 'ar')
-    return jsonify({
-        "help": "📝 طريقة الاستخدام:\nاكتب أي سؤال في الرياضيات، الفيزياء، الميكانيكا، الكهرباء، الإلكترونيات، المحركات، أو PLC وسيقوم التطبيق بالإجابة مع شرح مفصل.",
-        "about": "🚀 تطبيق المساعد الهندسي v3.0 - يدعم 6 لغات و 7 مجالات هندسية."
-    })
-
-@app.route('/api/status', methods=['GET'])
-def get_status():
-    """الحالة (للمطور)"""
-    return jsonify({
-        "status": "running",
-        "version": "3.0"
-    })
+domain_detector = DomainDetector()
 
 # ============================================================
-# 🚀 التشغيل
+# 🤖 دوال الذكاء الاصطناعي المحسنة
 # ============================================================
 
-if __name__ == '__main__':
-    print("\n" + "="*70)
-    print("🔥 MECHATRONICS ASSISTANT v3.0 - جاهز للتشغيل")
-    print("="*70)
-    print("📝 المستخدم يرى فقط الإجابات - لا أخطاء تقنية")
-    print("🔄 التبديل بين APIs تلقائي (Gemini → DeepSeek → OpenRouter)")
-    print("🧠 كشف المجال ذكي (بدون كلمات مفتاحية)")
-    print("="*70)
-    print("🌐 http://127.0.0.1:5000")
-    print("="*70 + "\n")
+class AIManager:
+    """مدير الذكاء الاصطناعي مع دعم متعدد وتشغيل متوازي"""
     
-    app.run(
-        host='127.0.0.1',
-        port=5000,
-        debug=True,
-        threaded=True
-    )
+    def __init__(self):
+        self.apis = [
+            (self.ask_gemini, "Gemini", 3.0),
+            (self.ask_deepseek, "DeepSeek", 2.5),
+            (self.ask_openrouter, "OpenRouter", 2.5),
+            (self.ask_github_models, "GitHub", 2.0),
+        ]
+        self.timeout = 10.0  # timeout كلي بالثواني
+    
+    async def ask_gemini(self, question: str) -> Optional[str]:
+        """استدعاء Gemini"""
+        if not api_keys.validate('gemini'):
+            return None
+        
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=api_keys.get('gemini'))
+            model = genai.GenerativeModel('gemini-2.0-flash-001')
+            
+            response = await asyncio.get_event_loop().run_in_executor(
+                None, 
+                lambda: model.generate_content(question)
+            )
+            
+            return self._sanitize_response(response.text)
+            
+        except Exception as e:
+            logger.error(f"Gemini error", api="Gemini", error=str(e))
+            return None
+    
+    async def ask_deepseek(self, question: str) -> Optional[str]:
+        """استدعاء DeepSeek"""
+        if not api_keys.validate('deepseek'):
+            return None
+        
+        try:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(
+                api_key=api_keys.get('deepseek'),
+                base_url="https://api.deepseek.com/v1",
+                timeout=self.timeout
+            )
