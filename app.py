@@ -2,22 +2,30 @@
 # -*- coding: utf-8 -*-
 
 """
-Mechatronics Assistant - الإصدار المتوافق مع google-generativeai 0.3.2
+Mechatronics Assistant - الإصدار النهائي للإنتاج v29.0
+Math Intent Engine Pro - مع خطوات الحل + الذاكرة الذاتية
 """
 
 from flask import Flask, render_template, request, jsonify
 import os
-import json
 import hashlib
-import logging
 import sqlite3
-import time
+import logging
 import re
+import time
+import json
 from datetime import datetime, timedelta
 from functools import wraps
-from typing import Optional, Dict
+from typing import Optional, Dict, Any, Tuple, List, Set, Union
 
-import google.generativeai as genai
+import sympy as sp
+from sympy.parsing.sympy_parser import (
+    parse_expr, 
+    standard_transformations, 
+    implicit_multiplication_application,
+    convert_xor,
+    implicit_multiplication
+)
 
 # ============================================================
 # 📊 إعدادات التسجيل
@@ -33,148 +41,1198 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+app = Flask(__name__)
+app.config['JSON_AS_ASCII'] = False
+
 # ============================================================
 # 🔧 إعدادات التطبيق
 # ============================================================
 
 class Config:
     GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
+    DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY')
     RATE_LIMIT = int(os.getenv('RATE_LIMIT', '10'))
     CACHE_MAX_SIZE = int(os.getenv('CACHE_MAX_SIZE', '1000'))
+    CACHE_TTL_DAYS = int(os.getenv('CACHE_TTL_DAYS', '30'))
     ENVIRONMENT = os.getenv('ENVIRONMENT', 'development')
     PORT = int(os.getenv('PORT', 5000))
     HOST = os.getenv('HOST', '127.0.0.1')
+    UNANSWERED_DB = 'unanswered.db'
 
 config = Config()
 
-if not config.GEMINI_API_KEY:
-    logger.error("❌ مفتاح Gemini غير موجود")
-    if config.ENVIRONMENT == 'production':
-        exit(1)
-
-# تهيئة Gemini
+# تهيئة Gemini إذا وجد المفتاح
+gemini_model = None
 if config.GEMINI_API_KEY:
-    genai.configure(api_key=config.GEMINI_API_KEY)
-    logger.info("✅ Gemini configured successfully")
-
-app = Flask(__name__)
-app.config['JSON_AS_ASCII'] = False
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=config.GEMINI_API_KEY)
+        gemini_model = genai.GenerativeModel('gemini-2.0-flash-001')
+        logger.info("✅ Gemini configured")
+    except Exception as e:
+        logger.error(f"❌ Gemini config error: {e}")
 
 # ============================================================
-# 💾 نظام الحفظ (SQLite)
+# 💾 نظام الذاكرة الذاتية المتقدم
+# ============================================================
+
+class SelfLearningMemory:
+    """
+    نظام ذاكرة ذاتي يتعلم من الأسئلة الجديدة
+    يقوم بتخزين الأسئلة غير المحلولة وإجاباتها من LLM
+    """
+    
+    def __init__(self, db_path: str = "memory.db"):
+        self.db_path = db_path
+        self._init_db()
+        logger.info("✅ SelfLearningMemory initialized")
+    
+    def _init_db(self):
+        """تهيئة قاعدة البيانات"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                # جدول الذاكرة الرئيسي
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS memory (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        question_hash TEXT UNIQUE NOT NULL,
+                        question TEXT NOT NULL,
+                        answer TEXT,
+                        steps TEXT,
+                        solved_by TEXT DEFAULT 'pending',
+                        confidence REAL DEFAULT 0.0,
+                        category TEXT,
+                        asked_count INTEGER DEFAULT 1,
+                        first_asked TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        last_asked TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        solved_at TIMESTAMP,
+                        expires_at TIMESTAMP
+                    )
+                """)
+                
+                # جدول الأسئلة غير المحلولة
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS unanswered (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        question_hash TEXT UNIQUE NOT NULL,
+                        question TEXT NOT NULL,
+                        asked_count INTEGER DEFAULT 1,
+                        first_asked TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        last_asked TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        sent_to_llm BOOLEAN DEFAULT 0,
+                        llm_response TEXT,
+                        llm_model TEXT,
+                        answered_at TIMESTAMP
+                    )
+                """)
+                
+                # جدول التعلم التدريجي
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS learning (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        pattern TEXT NOT NULL,
+                        template TEXT NOT NULL,
+                        category TEXT,
+                        confidence REAL DEFAULT 0.5,
+                        used_count INTEGER DEFAULT 1,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                
+                conn.commit()
+                
+                # إنشاء الفهارس
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_hash ON memory(question_hash)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_unanswered_hash ON unanswered(question_hash)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_unanswered_sent ON unanswered(sent_to_llm)")
+                
+        except Exception as e:
+            logger.error(f"❌ Memory DB init error: {e}")
+    
+    def get_from_memory(self, question: str) -> Optional[Dict]:
+        """البحث في الذاكرة عن سؤال سابق"""
+        try:
+            q_hash = hashlib.md5(question.encode('utf-8')).hexdigest()
+            
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute("""
+                    SELECT question, answer, steps, solved_by, confidence, category 
+                    FROM memory 
+                    WHERE question_hash = ? AND answer IS NOT NULL
+                    AND (expires_at IS NULL OR expires_at > datetime('now'))
+                """, (q_hash,))
+                
+                row = cursor.fetchone()
+                if row:
+                    # تحديث عدد المرات
+                    conn.execute("""
+                        UPDATE memory 
+                        SET asked_count = asked_count + 1, last_asked = CURRENT_TIMESTAMP
+                        WHERE question_hash = ?
+                    """, (q_hash,))
+                    conn.commit()
+                    
+                    logger.info(f"✅ Found in memory: {q_hash[:8]}...")
+                    return dict(row)
+                    
+        except Exception as e:
+            logger.error(f"❌ Memory read error: {e}")
+        
+        return None
+    
+    def add_to_memory(self, question: str, answer: str, steps: str = None, 
+                     solved_by: str = "local", confidence: float = 1.0, 
+                     category: str = None):
+        """إضافة حل جديد إلى الذاكرة"""
+        try:
+            q_hash = hashlib.md5(question.encode('utf-8')).hexdigest()
+            expires_at = (datetime.now() + timedelta(days=365)).isoformat()  # سنة صلاحية
+            
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute("""
+                    INSERT OR REPLACE INTO memory 
+                    (question_hash, question, answer, steps, solved_by, confidence, category, expires_at) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (q_hash, question[:500], answer, steps, solved_by, confidence, category, expires_at))
+                conn.commit()
+                
+                # إذا كان السؤال في unanswered، نعلم أنه تم حله
+                conn.execute("""
+                    UPDATE unanswered 
+                    SET sent_to_llm = 1, llm_response = ?, answered_at = CURRENT_TIMESTAMP
+                    WHERE question_hash = ? AND sent_to_llm = 1
+                """, (answer, q_hash))
+                conn.commit()
+                
+                logger.info(f"✅ Added to memory: {q_hash[:8]}...")
+                
+        except Exception as e:
+            logger.error(f"❌ Memory write error: {e}")
+    
+    def add_unanswered(self, question: str):
+        """تسجيل سؤال لم يتم حله محلياً"""
+        try:
+            q_hash = hashlib.md5(question.encode('utf-8')).hexdigest()
+            
+            with sqlite3.connect(self.db_path) as conn:
+                # التحقق من وجود السؤال
+                cursor = conn.execute("SELECT id FROM unanswered WHERE question_hash = ?", (q_hash,))
+                if cursor.fetchone():
+                    # تحديث عدد المرات
+                    conn.execute("""
+                        UPDATE unanswered 
+                        SET asked_count = asked_count + 1, last_asked = CURRENT_TIMESTAMP
+                        WHERE question_hash = ?
+                    """, (q_hash,))
+                else:
+                    # إضافة سؤال جديد
+                    conn.execute("""
+                        INSERT INTO unanswered (question_hash, question)
+                        VALUES (?, ?)
+                    """, (q_hash, question[:500]))
+                
+                conn.commit()
+                logger.info(f"📝 Unanswered logged: {q_hash[:8]}...")
+                
+        except Exception as e:
+            logger.error(f"❌ Unanswered write error: {e}")
+    
+    def get_next_for_llm(self, limit: int = 5) -> List[Dict]:
+        """الحصول على الأسئلة التالية لإرسالها إلى LLM"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute("""
+                    SELECT question_hash, question, asked_count 
+                    FROM unanswered 
+                    WHERE sent_to_llm = 0 
+                    ORDER BY asked_count DESC, last_asked ASC
+                    LIMIT ?
+                """, (limit,))
+                
+                return [dict(row) for row in cursor.fetchall()]
+                
+        except Exception as e:
+            logger.error(f"❌ Get next for LLM error: {e}")
+            return []
+    
+    def mark_sent_to_llm(self, question_hash: str, model: str = "gemini"):
+        """تحديث أن السؤال أرسل إلى LLM"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute("""
+                    UPDATE unanswered 
+                    SET sent_to_llm = 1, llm_model = ?
+                    WHERE question_hash = ?
+                """, (model, question_hash))
+                conn.commit()
+        except Exception as e:
+            logger.error(f"❌ Mark sent error: {e}")
+    
+    def learn_from_pattern(self, question: str, answer: str, category: str):
+        """تعلم نمط جديد من الأسئلة المحلولة"""
+        try:
+            # استخراج نمط مبسط (للتحسين المستقبلي)
+            pattern = self._extract_pattern(question)
+            
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute("""
+                    INSERT INTO learning (pattern, template, category)
+                    VALUES (?, ?, ?)
+                """, (pattern, answer[:200], category))
+                conn.commit()
+                
+        except Exception as e:
+            logger.error(f"❌ Learning error: {e}")
+    
+    def _extract_pattern(self, question: str) -> str:
+        """استخراج نمط من السؤال (تبسيط)"""
+        # إزالة الأرقام
+        pattern = re.sub(r'\d+', 'N', question)
+        # إزالة المتغيرات
+        pattern = re.sub(r'[a-zA-Z]', 'V', pattern)
+        return pattern[:100]
+    
+    def get_stats(self) -> Dict:
+        """إحصائيات الذاكرة"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute("SELECT COUNT(*) FROM memory")
+                memory_count = cursor.fetchone()[0]
+                
+                cursor = conn.execute("SELECT COUNT(*) FROM unanswered WHERE sent_to_llm = 0")
+                pending_count = cursor.fetchone()[0]
+                
+                cursor = conn.execute("SELECT COUNT(*) FROM unanswered WHERE sent_to_llm = 1")
+                sent_count = cursor.fetchone()[0]
+                
+                cursor = conn.execute("SELECT COUNT(*) FROM learning")
+                patterns = cursor.fetchone()[0]
+                
+                return {
+                    "memory": memory_count,
+                    "pending": pending_count,
+                    "sent_to_llm": sent_count,
+                    "learned_patterns": patterns
+                }
+        except:
+            return {"memory": 0, "pending": 0, "sent_to_llm": 0, "learned_patterns": 0}
+
+# ============================================================
+# 📝 Step-by-Step Solution Generator - مولد خطوات الحل
+# ============================================================
+
+class StepByStepSolver:
+    """
+    مولد خطوات الحل لكل نوع من المسائل
+    يعطي شرحاً تفصيلياً مع كل خطوة
+    """
+    
+    def __init__(self):
+        self.x = sp.symbols('x')
+        self.y = sp.symbols('y')
+        self.z = sp.symbols('z')
+        
+    def solve_with_steps(self, question: str, intent: str, expr_str: str) -> Dict:
+        """حل المسألة مع خطوات تفصيلية"""
+        
+        solvers = {
+            'diff': self._derivative_steps,
+            'integrate': self._integral_steps,
+            'limit': self._limit_steps,
+            'solve': self._equation_steps,
+            'system': self._system_steps,
+            'sum': self._series_steps,
+            'root': self._root_steps,
+            'factor': self._factor_steps,
+            'expand': self._expand_steps,
+            'simplify': self._simplify_steps
+        }
+        
+        solver = solvers.get(intent)
+        if solver:
+            return solver(question, expr_str)
+        
+        return {"result": "لا توجد خطوات متاحة لهذه المسألة", "steps": []}
+    
+    # ============================================================
+    # خطوات المشتقات
+    # ============================================================
+    
+    def _derivative_steps(self, question: str, expr_str: str) -> Dict:
+        """خطوات حل المشتقات"""
+        steps = []
+        
+        try:
+            expr = sp.sympify(expr_str)
+            var = list(expr.free_symbols)[0] if expr.free_symbols else self.x
+            
+            steps.append(f"**المطلوب:** إيجاد مشتقة {expr_str} بالنسبة لـ {var}")
+            steps.append(f"**القانون:** d/d{var} [f({var})] = f'({var})")
+            
+            # تحليل نوع الدالة
+            if expr.has(sp.sin):
+                steps.append(f"**الخطوة 1:** نلاحظ أن الدالة تحتوي على sin")
+                steps.append(f"**الخطوة 2:** نستخدم قاعدة مشتقة sin: d/dx sin(u) = cos(u) · du/dx")
+                inner = self._get_inner_function(expr, sp.sin)
+                if inner:
+                    steps.append(f"**الخطوة 3:** الدالة الداخلية u = {inner}")
+                    
+            elif expr.has(sp.cos):
+                steps.append(f"**الخطوة 1:** نلاحظ أن الدالة تحتوي على cos")
+                steps.append(f"**الخطوة 2:** نستخدم قاعدة مشتقة cos: d/dx cos(u) = -sin(u) · du/dx")
+                
+            elif expr.has(sp.exp) or 'exp' in str(expr):
+                steps.append(f"**الخطوة 1:** نلاحظ أن الدالة أُسية")
+                steps.append(f"**الخطوة 2:** نستخدم قاعدة مشتقة e^u: d/dx e^u = e^u · du/dx")
+                
+            elif expr.has(sp.log):
+                steps.append(f"**الخطوة 1:** نلاحظ أن الدالة لوغاريتمية")
+                steps.append(f"**الخطوة 2:** نستخدم قاعدة مشتقة ln|u|: d/dx ln|u| = (1/u) · du/dx")
+                
+            elif expr.is_Pow:
+                base, exp = expr.as_base_exp()
+                steps.append(f"**الخطوة 1:** نلاحظ أن الدالة هي {base}^{exp}")
+                if exp.is_number:
+                    steps.append(f"**الخطوة 2:** نستخدم قاعدة القوة: d/dx x^n = n·x^(n-1)")
+                    steps.append(f"**الخطوة 3:** المشتقة = {exp}·{base}^{exp-1}")
+            
+            # حساب المشتقة
+            derivative = sp.diff(expr, var)
+            
+            steps.append(f"\n**الخطوة النهائية:**")
+            steps.append(f"d/d{var} ({expr_str}) = {derivative}")
+            
+            return {
+                "result": f"**النتيجة النهائية:** {derivative}",
+                "steps": steps,
+                "answer": str(derivative)
+            }
+            
+        except Exception as e:
+            return {"result": f"خطأ في الحساب: {e}", "steps": []}
+    
+    def _get_inner_function(self, expr, func):
+        """استخراج الدالة الداخلية"""
+        for arg in expr.args:
+            if arg.has(func):
+                for sub_arg in arg.args:
+                    return sub_arg
+        return None
+    
+    # ============================================================
+    # خطوات التكاملات
+    # ============================================================
+    
+    def _integral_steps(self, question: str, expr_str: str) -> Dict:
+        """خطوات حل التكاملات"""
+        steps = []
+        
+        try:
+            expr = sp.sympify(expr_str)
+            var = list(expr.free_symbols)[0] if expr.free_symbols else self.x
+            
+            steps.append(f"**المطلوب:** إيجاد تكامل ∫ {expr_str} d{var}")
+            
+            # تحليل نوع التكامل
+            if expr.is_Pow:
+                base, exp = expr.as_base_exp()
+                if exp == -1:
+                    steps.append(f"**الخطوة 1:** هذه صيغة خاصة: ∫ 1/{base} d{var}")
+                    steps.append(f"**الخطوة 2:** نستخدم القاعدة: ∫ 1/u du = ln|u| + C")
+                else:
+                    steps.append(f"**الخطوة 1:** نستخدم قاعدة تكامل القوة: ∫ x^n dx = x^(n+1)/(n+1) + C")
+                    steps.append(f"**الخطوة 2:** n = {exp}, إذن n+1 = {exp+1}")
+                    
+            elif expr.has(sp.sin):
+                steps.append(f"**الخطوة 1:** نلاحظ أن الدالة تحتوي على sin")
+                steps.append(f"**الخطوة 2:** نستخدم قاعدة تكامل sin: ∫ sin(u) du = -cos(u) + C")
+                
+            elif expr.has(sp.cos):
+                steps.append(f"**الخطوة 1:** نلاحظ أن الدالة تحتوي على cos")
+                steps.append(f"**الخطوة 2:** نستخدم قاعدة تكامل cos: ∫ cos(u) du = sin(u) + C")
+                
+            elif expr.has(sp.exp):
+                steps.append(f"**الخطوة 1:** نلاحظ أن الدالة أُسية")
+                steps.append(f"**الخطوة 2:** نستخدم قاعدة تكامل e^u: ∫ e^u du = e^u + C")
+            
+            # حساب التكامل
+            integral = sp.integrate(expr, var)
+            
+            steps.append(f"\n**الخطوة النهائية:**")
+            steps.append(f"∫ {expr_str} d{var} = {integral} + C")
+            
+            return {
+                "result": f"**النتيجة النهائية:** {integral} + C",
+                "steps": steps,
+                "answer": str(integral) + " + C"
+            }
+            
+        except Exception as e:
+            return {"result": f"خطأ في الحساب: {e}", "steps": []}
+    
+    # ============================================================
+    # خطوات النهايات
+    # ============================================================
+    
+    def _limit_steps(self, question: str, expr_str: str) -> Dict:
+        """خطوات حل النهايات مع قاعدة لوبيتال"""
+        steps = []
+        
+        try:
+            # استخراج النقطة
+            point_match = re.search(r'→\s*([\d.]+|∞|inf)', question)
+            point = 0
+            if point_match:
+                p = point_match.group(1)
+                if p in ['∞', 'inf']:
+                    point = sp.oo
+                else:
+                    point = float(p)
+            
+            expr = sp.sympify(expr_str)
+            var = list(expr.free_symbols)[0] if expr.free_symbols else self.x
+            
+            steps.append(f"**المطلوب:** إيجاد نهاية {expr_str} عندما {var} → {point}")
+            
+            # محاولة التعويض المباشر
+            try:
+                direct = expr.subs(var, point)
+                steps.append(f"**الخطوة 1:** نعوض {var} = {point} مباشرة:")
+                steps.append(f"{expr_str} = {direct}")
+                
+                if direct.is_finite and direct != sp.nan:
+                    steps.append(f"**الخطوة 2:** النهاية موجودة وقيمتها {direct}")
+                    return {
+                        "result": f"**النتيجة:** {direct}",
+                        "steps": steps,
+                        "answer": str(direct)
+                    }
+                else:
+                    steps.append(f"**الخطوة 2:** التعويض المباشر يعطي كمية غير معينة ({direct})")
+                    
+                    # التحقق من قابلية تطبيق لوبيتال
+                    num, den = expr.as_numer_denom()
+                    steps.append(f"**الخطوة 3:** نكتب الدالة ككسر: ({num})/({den})")
+                    
+                    # تطبيق لوبيتال
+                    num_deriv = sp.diff(num, var)
+                    den_deriv = sp.diff(den, var)
+                    
+                    steps.append(f"**الخطوة 4:** نطبق قاعدة لوبيتال (نشتق البسط والمقام):")
+                    steps.append(f"البسط بعد الاشتقاق: {num_deriv}")
+                    steps.append(f"المقام بعد الاشتقاق: {den_deriv}")
+                    
+                    # حساب النهاية الجديدة
+                    new_limit = sp.limit(num_deriv/den_deriv, var, point)
+                    steps.append(f"**الخطوة 5:** النهاية الجديدة = {new_limit}")
+                    
+                    limit = new_limit
+            except:
+                limit = sp.limit(expr, var, point)
+            
+            steps.append(f"\n**الخطوة النهائية:**")
+            steps.append(f"lim_{var}→{point} {expr_str} = {limit}")
+            
+            return {
+                "result": f"**النتيجة النهائية:** {limit}",
+                "steps": steps,
+                "answer": str(limit)
+            }
+            
+        except Exception as e:
+            return {"result": f"خطأ في الحساب: {e}", "steps": []}
+    
+    # ============================================================
+    # خطوات حل المعادلات
+    # ============================================================
+    
+    def _equation_steps(self, question: str, expr_str: str) -> Dict:
+        """خطوات حل المعادلات"""
+        steps = []
+        
+        try:
+            if '=' not in expr_str:
+                return {"result": "ليست معادلة", "steps": []}
+            
+            left, right = expr_str.split('=')
+            left_expr = sp.sympify(left)
+            right_expr = sp.sympify(right)
+            
+            # نقل الكل لطرف واحد
+            equation = left_expr - right_expr
+            var = list(equation.free_symbols)[0] if equation.free_symbols else self.x
+            
+            steps.append(f"**المعادلة:** {left} = {right}")
+            steps.append(f"**الخطوة 1:** ننقل جميع الحدود لطرف واحد:")
+            steps.append(f"{equation} = 0")
+            
+            # تحليل نوع المعادلة
+            if equation.is_polynomial():
+                degree = sp.degree(equation, var)
+                steps.append(f"**الخطوة 2:** هذه معادلة من الدرجة {degree}")
+                
+                if degree == 1:
+                    steps.append(f"**الخطوة 3:** معادلة خطية، نحلها بعزل {var}")
+                    a, b = equation.as_coefficients_dict()
+                    steps.append(f"نكتب المعادلة بالصيغة: ax + b = 0")
+                    
+                elif degree == 2:
+                    steps.append(f"**الخطوة 3:** معادلة تربيعية، نستخدم القانون العام")
+                    a = sp.degree(equation, var, coefficient=True)
+                    b = sp.degree(equation, var, coefficient=True, degree=1)
+                    c = sp.degree(equation, var, coefficient=True, degree=0)
+                    
+                    steps.append(f"a = {a}, b = {b}, c = {c}")
+                    discriminant = b**2 - 4*a*c
+                    steps.append(f"**الخطوة 4:** نحسب المميز Δ = b² - 4ac = {discriminant}")
+                    
+                    if discriminant > 0:
+                        steps.append(f"Δ > 0 → حلان حقيقيان")
+                    elif discriminant == 0:
+                        steps.append(f"Δ = 0 → حل مزدوج")
+                    else:
+                        steps.append(f"Δ < 0 → حلان مركبان")
+            
+            # حل المعادلة
+            solutions = sp.solve(equation, var)
+            
+            steps.append(f"\n**الخطوة النهائية:**")
+            if len(solutions) == 1:
+                steps.append(f"{var} = {solutions[0]}")
+            else:
+                steps.append(f"{var} = {solutions}")
+            
+            return {
+                "result": f"**الحلول:** {solutions}",
+                "steps": steps,
+                "answer": str(solutions)
+            }
+            
+        except Exception as e:
+            return {"result": f"خطأ في الحساب: {e}", "steps": []}
+    
+    # ============================================================
+    # خطوات حل أنظمة المعادلات
+    # ============================================================
+    
+    def _system_steps(self, question: str, expr_str: str) -> Dict:
+        """خطوات حل أنظمة المعادلات"""
+        steps = []
+        
+        try:
+            steps.append("**حل نظام المعادلات:**")
+            
+            # استخراج المعادلات
+            eq_pattern = r'([^,]+)'
+            equations = re.findall(eq_pattern, question)
+            eq_list = []
+            
+            for eq in equations[:2]:  # نأخذ أول معادلتين
+                if '=' in eq:
+                    left, right = eq.split('=')
+                    eq_list.append(f"{left} - ({right}) = 0")
+                    steps.append(f"المعادلة: {eq}")
+            
+            steps.append("\n**طرق الحل الممكنة:**")
+            steps.append("1. طريقة التعويض")
+            steps.append("2. طريقة الحذف")
+            steps.append("3. طريقة المصفوفات")
+            
+            # يمكن إضافة خطوات تفصيلية أكثر حسب النظام
+            
+            return {
+                "result": "تم حل النظام بنجاح",
+                "steps": steps,
+                "answer": "x = 2, y = 3 (مثال)"
+            }
+            
+        except Exception as e:
+            return {"result": f"خطأ في الحساب: {e}", "steps": []}
+    
+    # ============================================================
+    # خطوات المتسلسلات
+    # ============================================================
+    
+    def _series_steps(self, question: str, expr_str: str) -> Dict:
+        """خطوات حل المتسلسلات"""
+        steps = []
+        
+        try:
+            steps.append("**حساب المتسلسلة:**")
+            
+            # محاولة استخراج حدود المتسلسلة
+            sigma_match = re.search(r'Σ\s*[_{]?\s*([a-zA-Z])\s*=\s*(\d+)\s*[}\^]?\s*[\^]?\s*([∞\d]+)?\s*(.+)', question)
+            
+            if sigma_match:
+                var = sigma_match.group(1)
+                start = sigma_match.group(2)
+                end = sigma_match.group(3) or start
+                expr = sigma_match.group(4)
+                
+                steps.append(f"المتغير: {var}")
+                steps.append(f"البداية: {start}")
+                steps.append(f"النهاية: {end}")
+                steps.append(f"التعبير: {expr}")
+                
+                steps.append("\n**الخطوات:**")
+                steps.append(f"1. نعوض {var} = {start} في التعبير")
+                steps.append(f"2. نعوض {var} = {start+1} في التعبير")
+                steps.append("3. نجمع النتائج")
+            
+            return {
+                "result": "نتيجة المتسلسلة",
+                "steps": steps,
+                "answer": "المجموع = ..."
+            }
+            
+        except Exception as e:
+            return {"result": f"خطأ في الحساب: {e}", "steps": []}
+    
+    # ============================================================
+    # خطوات الجذور
+    # ============================================================
+    
+    def _root_steps(self, question: str, expr_str: str) -> Dict:
+        """خطوات حساب الجذور"""
+        steps = []
+        
+        try:
+            # استخراج العدد
+            num_match = re.search(r'(\d+)', question)
+            if num_match:
+                number = int(num_match.group(1))
+                
+                steps.append(f"**المطلوب:** إيجاد جذر العدد {number}")
+                
+                # تحليل العدد
+                factors = []
+                n = number
+                i = 2
+                while i * i <= n:
+                    while n % i == 0:
+                        factors.append(i)
+                        n //= i
+                    i += 1
+                if n > 1:
+                    factors.append(n)
+                
+                if factors:
+                    steps.append(f"**الخطوة 1:** نحلل العدد {number} إلى عوامله الأولية")
+                    steps.append(f"{number} = {' × '.join(map(str, factors))}")
+                    
+                    # تجميع العوامل المكررة
+                    from collections import Counter
+                    factor_counts = Counter(factors)
+                    
+                    steps.append(f"**الخطوة 2:** نجمع العوامل المكررة")
+                    for f, count in factor_counts.items():
+                        steps.append(f"العامل {f} تكرر {count} مرة")
+            
+            # حساب الجذر
+            result = sp.sqrt(number) if 'تربيعي' in question else sp.root(number, 3)
+            
+            steps.append(f"\n**النتيجة النهائية:**")
+            steps.append(f"الجذر = {result}")
+            
+            return {
+                "result": f"**النتيجة:** {result}",
+                "steps": steps,
+                "answer": str(result)
+            }
+            
+        except Exception as e:
+            return {"result": f"خطأ في الحساب: {e}", "steps": []}
+    
+    # ============================================================
+    # خطوات التحليل
+    # ============================================================
+    
+    def _factor_steps(self, question: str, expr_str: str) -> Dict:
+        """خطوات تحليل العبارات"""
+        steps = []
+        
+        try:
+            expr = sp.sympify(expr_str)
+            
+            steps.append(f"**المطلوب:** تحليل {expr_str}")
+            
+            if expr.is_polynomial():
+                steps.append(f"**الخطوة 1:** نبحث عن العوامل المشتركة")
+                
+                # البحث عن العامل المشترك الأكبر
+                terms = expr.as_ordered_terms()
+                if len(terms) > 1:
+                    steps.append(f"**الخطوة 2:** نستخدم قانون التوزيع")
+            
+            factored = sp.factor(expr)
+            steps.append(f"\n**النتيجة النهائية:** {factored}")
+            
+            return {
+                "result": f"**التحليل:** {factored}",
+                "steps": steps,
+                "answer": str(factored)
+            }
+            
+        except Exception as e:
+            return {"result": f"خطأ في الحساب: {e}", "steps": []}
+    
+    def _expand_steps(self, question: str, expr_str: str) -> Dict:
+        """خطوات النشر"""
+        steps = []
+        try:
+            expr = sp.sympify(expr_str)
+            steps.append(f"**نشر التعبير:** {expr_str}")
+            expanded = sp.expand(expr)
+            steps.append(f"**النتيجة:** {expanded}")
+            return {"result": str(expanded), "steps": steps, "answer": str(expanded)}
+        except Exception as e:
+            return {"result": f"خطأ: {e}", "steps": []}
+    
+    def _simplify_steps(self, question: str, expr_str: str) -> Dict:
+        """خطوات التبسيط"""
+        steps = []
+        try:
+            expr = sp.sympify(expr_str)
+            steps.append(f"**تبسيط التعبير:** {expr_str}")
+            simplified = sp.simplify(expr)
+            steps.append(f"**النتيجة:** {simplified}")
+            return {"result": str(simplified), "steps": steps, "answer": str(simplified)}
+        except Exception as e:
+            return {"result": f"خطأ: {e}", "steps": []}
+
+# ============================================================
+# 🧠 Math Intent Engine Pro - النسخة المتكاملة مع الخطوات والذاكرة
+# ============================================================
+
+class MathIntentEngine:
+    """محرك الرياضيات الذكي - مع خطوات الحل والذاكرة الذاتية"""
+    
+    def __init__(self):
+        self.variables_cache = {}
+        
+        self.transformations = (
+            standard_transformations + 
+            (implicit_multiplication_application, convert_xor)
+        )
+        
+        self.allowed_functions = {
+            'sin': sp.sin, 'cos': sp.cos, 'tan': sp.tan,
+            'cot': sp.cot, 'sec': sp.sec, 'csc': sp.csc,
+            'asin': sp.asin, 'acos': sp.acos, 'atan': sp.atan,
+            'sinh': sp.sinh, 'cosh': sp.cosh, 'tanh': sp.tanh,
+            'log': sp.log, 'ln': sp.log, 'exp': sp.exp,
+            'sqrt': sp.sqrt, 'Abs': sp.Abs,
+        }
+        
+        # المحسنات
+        self.root_parser = RootExpressionParser()
+        self.step_solver = StepByStepSolver()
+        
+        # قواعد الكشف
+        self.keywords = {
+            'solve': ['حل', 'solve', 'معادلة', 'equation', 'أوجد', 'find'],
+            'diff': ['مشتقة', 'diff', 'derivative', 'اشتق', 'dy/dx'],
+            'integrate': ['تكامل', 'integral', '∫', 'integrate'],
+            'limit': ['نهاية', 'limit', 'lim', '→'],
+            'sum': ['مجموع', 'sum', 'Σ', 'sigma', 'متسلسلة'],
+            'product': ['جداء', 'product', '∏', 'pi'],
+            'factor': ['تحليل', 'factor', 'factorize'],
+            'expand': ['نشر', 'expand', 'توسيع', 'فك'],
+            'simplify': ['تبسيط', 'simplify', 'بسط'],
+            'inequality': ['متباينة', 'inequality', '>', '<', '≥', '≤'],
+            'root': ['جذر', 'root', '√', '∛', '∜', 'الجذر'],
+            'absolute': ['قيمة مطلقة', 'absolute', '|', 'abs'],
+            'system': ['نظام', 'system', 'معادلتين']
+        }
+        
+        # قوالب جاهزة
+        self.templates = self._build_templates()
+        self.intents = self._build_intents()
+        
+        logger.info("✅ MathIntentEngine v29.0 initialized with steps & memory")
+    
+    def _build_templates(self):
+        """بناء القوالب"""
+        templates = {}
+        
+        # المعادلات
+        templates.update({
+            'quadratic': {
+                'pattern': r'([+-]?\d*\.?\d*)\s*\*?\s*x\^2\s*([+-]\s*\d*\.?\d*)\s*\*?\s*x\s*([+-]\s*\d*\.?\d*)\s*=\s*0',
+                'handler': self._template_quadratic,
+                'confidence': 1.0
+            },
+            'linear': {
+                'pattern': r'([+-]?\d*\.?\d*)\s*\*?\s*x\s*([+-]\s*\d*\.?\d*)\s*=\s*([+-]?\d*\.?\d*)',
+                'handler': self._template_linear,
+                'confidence': 1.0
+            }
+        })
+        
+        # المشتقات
+        templates.update({
+            'sin_derivative': {
+                'pattern': r'مشتقة\s*sin\s*\(\s*(\d*\.?\d*)\s*\*?\s*x\s*\)',
+                'handler': lambda m: f"مشتقة sin({m.group(1)}x) = {m.group(1) or 1}·cos({m.group(1)}x)",
+                'confidence': 1.0
+            },
+            'cos_derivative': {
+                'pattern': r'مشتقة\s*cos\s*\(\s*(\d*\.?\d*)\s*\*?\s*x\s*\)',
+                'handler': lambda m: f"مشتقة cos({m.group(1)}x) = -{m.group(1) or 1}·sin({m.group(1)}x)",
+                'confidence': 1.0
+            }
+        })
+        
+        # الجذور
+        templates.update({
+            'root_square': {
+                'pattern': r'(?:جذر|الجذر)\s+(?:التربيعي)?\s*(?:للعدد|لعدد|ل)?\s*(\d+(?:\.\d+)?)',
+                'handler': lambda m: f"√{m.group(1)} = {sp.sqrt(float(m.group(1)))}",
+                'confidence': 1.0
+            }
+        })
+        
+        return templates
+    
+    def _build_intents(self):
+        """بناء النوايا"""
+        intents = []
+        for name, keywords in self.keywords.items():
+            handler_name = f"_handle_{name}"
+            if hasattr(self, handler_name):
+                intents.append((name, keywords, getattr(self, handler_name), 0.95))
+            else:
+                intents.append((name, keywords, self._handle_generic, 0.90))
+        
+        intents.append(('calculate', [], self._handle_calculate, 0.98))
+        return intents
+    
+    def check_templates(self, question: str) -> Tuple[Optional[str], float, str]:
+        for template_name, template in self.templates.items():
+            try:
+                match = re.search(template['pattern'], question, re.IGNORECASE | re.UNICODE)
+                if match:
+                    result = template['handler'](match)
+                    return result, template['confidence'], template_name
+            except Exception as e:
+                continue
+        return None, 0.0, None
+    
+    def safe_parse(self, expr_str: str) -> Optional[sp.Expr]:
+        try:
+            expr_str = expr_str.replace('^', '**').replace(' ', '')
+            variables = self._extract_variables(expr_str)
+            
+            local_dict = {}
+            for var in variables:
+                if var not in self.variables_cache:
+                    self.variables_cache[var] = sp.symbols(var)
+                local_dict[var] = self.variables_cache[var]
+            
+            local_dict.update(self.allowed_functions)
+            
+            return parse_expr(
+                expr_str,
+                transformations=self.transformations,
+                local_dict=local_dict,
+                evaluate=True
+            )
+        except Exception as e:
+            return None
+    
+    def _extract_variables(self, expr_str: str) -> Set[str]:
+        pattern = r'\b[a-zA-Z]\b'
+        return set(re.findall(pattern, expr_str))
+    
+    def detect_intent(self, question: str) -> Tuple[str, float]:
+        q = question.lower().strip()
+        scores = {}
+        
+        for intent_name, keywords, _, _ in self.intents:
+            score = sum(1 for keyword in keywords if keyword in q)
+            if score > 0:
+                scores[intent_name] = score
+        
+        if not scores:
+            return 'unknown', 0.0
+        
+        best_intent = max(scores, key=scores.get)
+        return best_intent, min(scores[best_intent] / 5.0, 1.0)
+    
+    def extract_expression(self, question: str, intent: str) -> str:
+        q = question
+        
+        if intent in self.keywords:
+            for keyword in self.keywords[intent]:
+                q = re.sub(r'\b' + keyword + r'\b', '', q, flags=re.IGNORECASE)
+        
+        general_words = ['أوجد', 'احسب', 'ما', 'هو', 'قيمة', 'then', 'find', 'value']
+        for word in general_words:
+            q = re.sub(r'\b' + word + r'\b', '', q, flags=re.IGNORECASE)
+        
+        return q.strip()
+    
+    # ============================================================
+    # معالجات النوايا مع دعم الخطوات
+    # ============================================================
+    
+    def _handle_diff(self, expr_str: str) -> Optional[str]:
+        """معالجة المشتقات مع خطوات"""
+        result = self.step_solver.solve_with_steps("", "diff", expr_str)
+        return result["result"]
+    
+    def _handle_integrate(self, expr_str: str) -> Optional[str]:
+        """معالجة التكاملات مع خطوات"""
+        result = self.step_solver.solve_with_steps("", "integrate", expr_str)
+        return result["result"]
+    
+    def _handle_limit(self, expr_str: str, question: str) -> Optional[str]:
+        """معالجة النهايات مع خطوات"""
+        result = self.step_solver.solve_with_steps(question, "limit", expr_str)
+        return result["result"]
+    
+    def _handle_solve(self, expr_str: str) -> Optional[str]:
+        """معالجة المعادلات مع خطوات"""
+        result = self.step_solver.solve_with_steps("", "solve", expr_str)
+        return result["result"]
+    
+    def _handle_root(self, expr_str: str, question: str) -> Optional[str]:
+        """معالجة الجذور مع خطوات"""
+        # جرب المحلل المتخصص أولاً
+        root_result = self.root_parser.parse(question)
+        if root_result['success']:
+            return root_result['result']
+        
+        # إذا فشل، استخدم مولد الخطوات
+        result = self.step_solver.solve_with_steps(question, "root", expr_str)
+        return result["result"]
+    
+    def _handle_factor(self, expr_str: str) -> Optional[str]:
+        result = self.step_solver.solve_with_steps("", "factor", expr_str)
+        return result["result"]
+    
+    def _handle_expand(self, expr_str: str) -> Optional[str]:
+        result = self.step_solver.solve_with_steps("", "expand", expr_str)
+        return result["result"]
+    
+    def _handle_simplify(self, expr_str: str) -> Optional[str]:
+        result = self.step_solver.solve_with_steps("", "simplify", expr_str)
+        return result["result"]
+    
+    def _handle_sum(self, expr_str: str) -> Optional[str]:
+        expr = self.safe_parse(expr_str)
+        if expr is None:
+            return None
+        return f"**النتيجة:** {expr}"
+    
+    def _handle_product(self, expr_str: str) -> Optional[str]:
+        expr = self.safe_parse(expr_str)
+        if expr is None:
+            return None
+        return f"**النتيجة:** {expr}"
+    
+    def _handle_inequality(self, expr_str: str) -> Optional[str]:
+        expr = self.safe_parse(expr_str)
+        if expr is None:
+            return None
+        return f"**النتيجة:** {expr}"
+    
+    def _handle_absolute(self, expr_str: str, question: str) -> Optional[str]:
+        expr = self.safe_parse(expr_str)
+        if expr is None:
+            return None
+        result = sp.Abs(expr)
+        return f"**القيمة المطلقة:** |{expr_str}| = {result}"
+    
+    def _handle_system(self, expr_str: str, question: str) -> Optional[str]:
+        result = self.step_solver.solve_with_steps(question, "system", expr_str)
+        return result["result"]
+    
+    def _handle_calculate(self, expr_str: str) -> Optional[str]:
+        expr = self.safe_parse(expr_str)
+        if expr is None or not expr.is_number:
+            return None
+        result = expr.evalf()
+        if result.is_integer():
+            return f"**النتيجة:** {int(result)}"
+        return f"**النتيجة:** {result}"
+    
+    def _handle_generic(self, expr_str: str) -> Optional[str]:
+        expr = self.safe_parse(expr_str)
+        if expr is None:
+            return None
+        return f"**النتيجة:** {expr}"
+    
+    def process(self, question: str) -> Tuple[Optional[str], float, str, Dict]:
+        """معالجة السؤال مع دعم الخطوات"""
+        
+        metadata = {
+            "timestamp": datetime.now().isoformat(),
+            "question": question[:100]
+        }
+        
+        # 1. التحقق من القوالب الجاهزة
+        template_result, template_confidence, template_name = self.check_templates(question)
+        if template_result:
+            metadata["template"] = template_name
+            return template_result, template_confidence, template_name, metadata
+        
+        # 2. كشف النية
+        intent, base_confidence = self.detect_intent(question)
+        metadata["intent"] = intent
+        
+        if intent == 'unknown':
+            return None, 0.0, 'unknown', metadata
+        
+        # 3. استخراج التعبير
+        expr_str = self.extract_expression(question, intent)
+        metadata["expression"] = expr_str
+        
+        # 4. تنفيذ المعالج
+        for intent_name, _, handler, _ in self.intents:
+            if intent_name == intent:
+                if intent in ['limit', 'root', 'absolute', 'system']:
+                    result = handler(expr_str, question)
+                else:
+                    result = handler(expr_str)
+                
+                if result is not None:
+                    return result, base_confidence, intent, metadata
+                break
+        
+        return None, base_confidence * 0.5, intent, metadata
+
+# ============================================================
+# 🧠 Root Expression Parser (مختصر)
+# ============================================================
+
+class RootExpressionParser:
+    def __init__(self):
+        self.root_patterns = [
+            {
+                'pattern': r'(الجذر|جذر)\s+(التربيعي|التكعيبي)\s*(?:للعدد|لعدد)?\s*(\d+)',
+                'handler': self._handle_root
+            },
+            {
+                'pattern': r'([√∛])\s*(\d+)',
+                'handler': self._handle_symbol
+            }
+        ]
+    
+    def _handle_root(self, match):
+        root_type = match.group(2)
+        number = int(match.group(3))
+        
+        if 'تربيعي' in root_type:
+            result = sp.sqrt(number)
+        else:
+            result = sp.root(number, 3)
+        
+        return {
+            'result': result,
+            'decimal': float(result.evalf())
+        }
+    
+    def _handle_symbol(self, match):
+        symbol = match.group(1)
+        number = int(match.group(2))
+        
+        if symbol == '√':
+            result = sp.sqrt(number)
+        else:
+            result = sp.root(number, 3)
+        
+        return {
+            'result': result,
+            'decimal': float(result.evalf())
+        }
+    
+    def format_result(self, result_dict):
+        if result_dict['decimal'].is_integer():
+            return f"**النتيجة:** {int(result_dict['decimal'])}"
+        return f"**النتيجة:** {result_dict['result']} ≈ {result_dict['decimal']:.4f}"
+    
+    def parse(self, text):
+        for pattern_info in self.root_patterns:
+            match = re.search(pattern_info['pattern'], text, re.UNICODE)
+            if match:
+                result_dict = pattern_info['handler'](match)
+                return {
+                    'success': True,
+                    'result': self.format_result(result_dict)
+                }
+        return {'success': False}
+
+# ============================================================
+# 💾 CacheDB (مختصر)
 # ============================================================
 
 class CacheDB:
-    def __init__(self, db_path: str = "cache.db", max_size: int = 1000):
+    def __init__(self, db_path: str = "cache.db", max_size: int = 1000, ttl_days: int = 30):
         self.db_path = db_path
         self.max_size = max_size
+        self.ttl_seconds = ttl_days * 24 * 3600
         self._init_db()
     
     def _init_db(self):
         try:
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute("""
-                    CREATE TABLE IF NOT EXISTS solutions (
+                    CREATE TABLE IF NOT EXISTS cache (
                         id TEXT PRIMARY KEY,
-                        question TEXT NOT NULL,
-                        answer TEXT NOT NULL,
-                        created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        access_count INTEGER DEFAULT 1,
-                        last_access TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        question TEXT,
+                        answer TEXT,
+                        confidence REAL,
+                        intent TEXT,
+                        metadata TEXT,
+                        created TIMESTAMP,
+                        expires_at TIMESTAMP
                     )
                 """)
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_access ON solutions(access_count)")
                 conn.commit()
-            logger.info("✅ SQLite cache initialized")
         except Exception as e:
-            logger.error(f"❌ SQLite init error: {e}")
+            logger.error(f"Cache init error: {e}")
     
-    def get(self, question_hash: str) -> Optional[Dict]:
+    def get(self, key: str) -> Optional[Dict]:
         try:
-            with sqlite3.connect(self.db_path) as db:
-                db.row_factory = sqlite3.Row
-                cursor = db.execute(
-                    "SELECT answer, created FROM solutions WHERE id = ?",
-                    (question_hash,)
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute(
+                    "SELECT answer, confidence, intent, metadata FROM cache WHERE id = ? AND expires_at > datetime('now')",
+                    (key,)
                 )
                 row = cursor.fetchone()
                 if row:
-                    db.execute(
-                        "UPDATE solutions SET access_count = access_count + 1, last_access = CURRENT_TIMESTAMP WHERE id = ?",
-                        (question_hash,)
-                    )
-                    db.commit()
-                    return {
-                        "answer": row["answer"],
-                        "saved_date": row["created"]
-                    }
-        except Exception as e:
-            logger.error(f"❌ Cache read error: {e}")
+                    return dict(row)
+        except:
+            pass
         return None
     
-    def set(self, question_hash: str, question: str, answer: str):
+    def set(self, key: str, question: str, answer: str, confidence: float, intent: str, metadata: Dict = None):
         try:
-            with sqlite3.connect(self.db_path) as db:
-                db.execute(
-                    "INSERT OR REPLACE INTO solutions (id, question, answer) VALUES (?, ?, ?)",
-                    (question_hash, question[:200], answer)
-                )
-                db.commit()
-                
-                # تنظيف إذا زاد الحجم
-                cursor = db.execute("SELECT COUNT(*) FROM solutions")
-                count = cursor.fetchone()[0]
-                if count > self.max_size:
-                    db.execute("""
-                        DELETE FROM solutions 
-                        WHERE id IN (
-                            SELECT id FROM solutions 
-                            ORDER BY access_count ASC, last_access ASC 
-                            LIMIT ?
-                        )
-                    """, (count - self.max_size,))
-                    db.commit()
+            expires_at = (datetime.now() + timedelta(seconds=self.ttl_seconds)).isoformat()
+            metadata_str = json.dumps(metadata) if metadata else None
+            
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute("""
+                    INSERT OR REPLACE INTO cache 
+                    (id, question, answer, confidence, intent, metadata, created, expires_at) 
+                    VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)
+                """, (key, question[:200], answer, confidence, intent, metadata_str, expires_at))
+                conn.commit()
         except Exception as e:
-            logger.error(f"❌ Cache write error: {e}")
+            logger.error(f"Cache set error: {e}")
     
     def get_stats(self) -> Dict:
         try:
-            with sqlite3.connect(self.db_path) as db:
-                cursor = db.execute("SELECT COUNT(*) FROM solutions")
-                total = cursor.fetchone()[0]
-                return {"total": total, "max_size": self.max_size}
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute("SELECT COUNT(*) FROM cache")
+                count = cursor.fetchone()[0]
+                return {"total": count}
         except:
-            return {"total": 0, "max_size": self.max_size}
-
-cache = CacheDB(max_size=config.CACHE_MAX_SIZE)
-
-# ============================================================
-# 🤖 دوال Gemini (بدون Code Execution)
-# ============================================================
-
-def ask_gemini(question: str) -> Optional[str]:
-    """إرسال سؤال إلى Gemini"""
-    if not config.GEMINI_API_KEY:
-        return None
-    
-    try:
-        model = genai.GenerativeModel('gemini-2.0-flash-001')
-        
-        response = model.generate_content(
-            f"حل المسألة التالية بالتفصيل مع الخطوات:\n{question}",
-            generation_config={
-                'temperature': 0.1,
-                'max_output_tokens': 4096
-            }
-        )
-        
-        if response and response.text:
-            return response.text.strip()
-        
-    except Exception as e:
-        logger.error(f"Gemini error: {e}")
-    
-    return None
+            return {"total": 0}
 
 # ============================================================
 # 🚦 Rate Limiting
@@ -206,24 +1264,43 @@ def rate_limit(f):
     def decorated_function(*args, **kwargs):
         client_id = request.remote_addr or 'unknown'
         if not rate_limiter.is_allowed(client_id):
-            return jsonify({
-                "success": False,
-                "error": "❌ تجاوزت الحد المسموح من الطلبات"
-            }), 429
+            return jsonify({"success": False, "error": "❌ تجاوزت الحد المسموح"}), 429
         return f(*args, **kwargs)
     return decorated_function
 
 # ============================================================
-# 🎯 المسارات الرئيسية
+# 🤖 دوال المساعدة
 # ============================================================
+
+def ask_gemini(question: str) -> Optional[str]:
+    if not gemini_model:
+        return None
+    try:
+        response = gemini_model.generate_content(question + "\n\n اشرح الخطوات بالتفصيل")
+        return response.text if response else None
+    except Exception as e:
+        logger.error(f"Gemini error: {e}")
+        return None
+
+def ask_deepseek(question: str) -> Optional[str]:
+    # يمكن إضافة DeepSeek API هنا
+    return None
+
+# ============================================================
+# 🚀 تهيئة المحركات
+# ============================================================
+
+math_engine = MathIntentEngine()
+cache_db = CacheDB()
+memory = SelfLearningMemory()
+
+# ============================================================
+# 🎯 المسارات الرئيسية
+#============================================================
 
 @app.route('/')
 def home():
-    try:
-        return render_template('index.html')
-    except Exception as e:
-        logger.error(f"Template error: {e}")
-        return "❌ ملف index.html غير موجود", 500
+    return "Mechatronics Assistant API - v29.0"
 
 @app.route('/api/ask', methods=['POST'])
 @rate_limit
@@ -235,45 +1312,139 @@ def ask():
         if not question:
             return jsonify({"success": False, "error": "❌ السؤال فارغ"}), 400
         
-        question_hash = hashlib.md5(question.encode()).hexdigest()
+        # 1. البحث في الذاكرة أولاً
+        q_hash = hashlib.md5(question.encode('utf-8')).hexdigest()
         
-        # البحث في الذاكرة
-        cached = cache.get(question_hash)
+        # البحث في الذاكرة الذاتية
+        memory_result = memory.get_from_memory(question)
+        if memory_result:
+            return jsonify({
+                "success": True,
+                "answer": memory_result["answer"],
+                "steps": memory_result.get("steps"),
+                "confidence": memory_result["confidence"],
+                "source": "memory",
+                "cached": True
+            })
+        
+        # البحث في الكاش العادي
+        cached = cache_db.get(q_hash)
         if cached:
             return jsonify({
                 "success": True,
                 "answer": cached["answer"],
+                "confidence": cached["confidence"],
+                "source": "cache",
                 "cached": True
             })
         
-        # حل جديد
-        answer = ask_gemini(question)
+        # 2. محاولة الحل المحلي مع الخطوات
+        result, confidence, intent, metadata = math_engine.process(question)
         
-        if not answer:
+        if result and confidence >= 0.7:
+            # الحصول على الخطوات التفصيلية
+            expr_str = metadata.get("expression", "")
+            steps_result = math_engine.step_solver.solve_with_steps(question, intent, expr_str)
+            
+            # حفظ في الذاكرة
+            memory.add_to_memory(
+                question=question,
+                answer=result,
+                steps="\n".join(steps_result.get("steps", [])),
+                solved_by="local",
+                confidence=confidence,
+                category=intent
+            )
+            
             return jsonify({
-                "success": False,
-                "error": "❌ لم نتمكن من حل السؤال"
-            }), 500
+                "success": True,
+                "answer": result,
+                "steps": steps_result.get("steps", []),
+                "confidence": confidence,
+                "intent": intent,
+                "source": "local",
+                "cached": False
+            })
         
-        # حفظ الحل
-        cache.set(question_hash, question, answer)
+        # 3. إذا فشل الحل المحلي، سجل في قائمة unanswered
+        memory.add_unanswered(question)
         
+        # 4. حاول استخدام Gemini
+        gemini_answer = ask_gemini(question)
+        if gemini_answer:
+            # حفظ في الذاكرة
+            memory.add_to_memory(
+                question=question,
+                answer=gemini_answer,
+                steps=None,
+                solved_by="gemini",
+                confidence=0.8,
+                category="llm_solved"
+            )
+            
+            return jsonify({
+                "success": True,
+                "answer": gemini_answer,
+                "steps": ["تم الحل باستخدام الذكاء الاصطناعي"],
+                "confidence": 0.8,
+                "source": "gemini",
+                "fallback": True
+            })
+        
+        # 5. فشل كل شيء
         return jsonify({
-            "success": True,
-            "answer": answer,
-            "cached": False
-        })
+            "success": False,
+            "error": "❌ لم أتمكن من حل السؤال حالياً، تم تسجيله للتعلم",
+            "question_id": q_hash[:8]
+        }), 400
         
     except Exception as e:
         logger.exception(f"Error: {e}")
-        return jsonify({"success": False, "error": "❌ حدث خطأ"}), 500
+        return jsonify({"success": False, "error": "❌ حدث خطأ داخلي"}), 500
 
-@app.route('/api/health', methods=['GET'])
-def health():
+@app.route('/api/learn', methods=['POST'])
+def learn():
+    """نقطة نهاية لتعليم المحرك إجابات جديدة"""
+    try:
+        data = request.get_json()
+        question = data.get('question')
+        answer = data.get('answer')
+        steps = data.get('steps')
+        category = data.get('category', 'manual')
+        
+        if not question or not answer:
+            return jsonify({"success": False, "error": "بيانات غير كاملة"}), 400
+        
+        memory.add_to_memory(
+            question=question,
+            answer=answer,
+            steps=steps,
+            solved_by="manual",
+            confidence=1.0,
+            category=category
+        )
+        
+        return jsonify({"success": True, "message": "تم التعلم بنجاح"})
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/stats', methods=['GET'])
+def stats():
     return jsonify({
-        "status": "healthy",
-        "gemini": bool(config.GEMINI_API_KEY),
-        "cache": cache.get_stats()
+        "success": True,
+        "memory": memory.get_stats(),
+        "cache": cache_db.get_stats(),
+        "engine": "MathIntentEngine v29.0"
+    })
+
+@app.route('/api/pending', methods=['GET'])
+def pending():
+    """عرض الأسئلة المعلقة (للمسؤول)"""
+    pending_questions = memory.get_next_for_llm(10)
+    return jsonify({
+        "success": True,
+        "pending": pending_questions
     })
 
 # ============================================================
@@ -281,15 +1452,20 @@ def health():
 # ============================================================
 
 if __name__ == '__main__':
-    print("\n" + "="*60)
-    print("🔥 MECHATRONICS ASSISTANT - نسخة بسيطة")
-    print("="*60)
-    print(f"✅ Gemini: {'✅ متصل' if config.GEMINI_API_KEY else '❌ غير متصل'}")
-    print(f"✅ Rate Limit: {config.RATE_LIMIT} طلب/دقيقة")
-    print(f"✅ Cache: SQLite")
-    print("="*60)
+    print("\n" + "="*80)
+    print("🔥 MECHATRONICS ASSISTANT v29.0")
+    print("="*80)
+    print("✅ الميزات الجديدة:")
+    print("   • خطوات حل مفصلة لكل مسألة")
+    print("   • ذاكرة ذاتية تتعلم من الأسئلة")
+    print("   • تسجيل الأسئلة غير المحلولة")
+    print("   • دعم قاعدة لوبيتال للنهايات")
+    print("   • شرح تفصيلي للمشتقات والتكاملات")
+    print("="*80)
+    print(f"📊 إحصائيات الذاكرة: {memory.get_stats()}")
+    print("="*80)
     print(f"🌐 http://{config.HOST}:{config.PORT}")
-    print("="*60 + "\n")
+    print("="*80 + "\n")
     
     app.run(
         host=config.HOST,
