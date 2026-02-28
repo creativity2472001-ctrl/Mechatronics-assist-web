@@ -614,7 +614,8 @@
             document.getElementById('answerContent').innerHTML = translations[currentLanguage].loading;
             
             try {
-                const response = await fetch('/api/ask', {
+                // ✅ تم التعديل هنا: من '/api/ask' إلى '/api/solve'
+                const response = await fetch('/api/solve', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -630,12 +631,17 @@
                 if (data.success) {
                     let answerHtml = '';
                     
-                    if (data.domain) {
-                        answerHtml += `<div class="domain-badge">📚 ${data.domain}</div>`;
+                    if (data.level) {
+                        const levelNames = {
+                            'simple': '🧮 آلة حاسبة',
+                            'advanced': '🤖 Gemini',
+                            'memory': '💾 ذاكرة'
+                        };
+                        answerHtml += `<div class="domain-badge">📚 ${levelNames[data.level] || data.level}</div>`;
                     }
                     
-                    if (data.ai_used) {
-                        answerHtml += `<span class="ai-badge">🤖 ${data.ai_used}</span>`;
+                    if (data.from_memory) {
+                        answerHtml += `<span class="ai-badge">💾 من الذاكرة (${data.uses || 1})</span>`;
                     }
                     
                     answerHtml += data.answer.replace(/\n/g, '<br>');
@@ -659,11 +665,11 @@
         // تحميل حالة التطبيق عند البدء
         async function loadStatus() {
             try {
-                const response = await fetch('/api/status');
+                const response = await fetch('/api/memory/stats');
                 const data = await response.json();
-                console.log('App status:', data);
+                console.log('App stats:', data);
             } catch (error) {
-                console.error('Failed to load status:', error);
+                console.error('Failed to load stats:', error);
             }
         }
         
@@ -671,4 +677,3 @@
     </script>
 </body>
 </html>
-
