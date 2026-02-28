@@ -1539,7 +1539,11 @@ memory = SelfLearningMemory()
 
 @app.route('/')
 def home():
-    return "Mechatronics Assistant API - v29.0"
+    try:
+        return render_template('index.html')
+    except Exception as e:
+        logger.error(f"Template error: {e}")
+        return f"❌ خطأ في تحميل الصفحة: {e}", 500
 
 @app.route('/api/ask', methods=['POST'])
 @rate_limit
