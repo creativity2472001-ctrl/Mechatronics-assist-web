@@ -508,7 +508,7 @@ gemini = GeminiSolver(api_key)
 # ============================================================
 @app.route('/')
 def home():
-return render_template('index.html')  # استخدم اسم الملف الموجود
+    return render_template('index.html')  # ✅ تم التعديل: أضفنا المسافة البادئة
 
 @app.route('/api/solve', methods=['POST'])
 def solve():
