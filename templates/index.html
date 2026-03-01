@@ -9,671 +9,429 @@
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-        }
-        
-        :root {
-            --primary: #2563eb;
-            --primary-dark: #1e40af;
-            --secondary: #64748b;
-            --success: #22c55e;
-            --danger: #ef4444;
-            --warning: #f59e0b;
-            --background: #f8fafc;
-            --surface: #ffffff;
-            --text: #0f172a;
-            --border: #e2e8f0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
         
         body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: white;
             min-height: 100vh;
             display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 16px;
-        }
-        
-        .app-container {
-            width: 100%;
-            max-width: 1200px;
-            height: 90vh;
-            background: var(--surface);
-            border-radius: 32px;
-            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
-            display: flex;
             flex-direction: column;
-            overflow: hidden;
-            position: relative;
         }
         
         /* Header */
         .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 16px 24px;
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f);
+            color: white;
+            padding: 15px 30px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            color: white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
         
-        .menu-btn, .send-btn {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            border: none;
-            background: rgba(255,255,255,0.2);
-            color: white;
-            font-size: 24px;
+        .logo h1 {
+            font-size: 1.8em;
+            font-weight: 600;
+        }
+        
+        .menu-container {
+            position: relative;
+        }
+        
+        .menu-icon {
+            font-size: 2em;
             cursor: pointer;
-            transition: all 0.3s ease;
+            background: rgba(255,255,255,0.2);
+            width: 50px;
+            height: 50px;
             display: flex;
             align-items: center;
             justify-content: center;
+            border-radius: 50%;
+            transition: background 0.3s;
         }
         
-        .menu-btn:hover, .send-btn:hover {
+        .menu-icon:hover {
             background: rgba(255,255,255,0.3);
-            transform: scale(1.1);
         }
         
-        .menu-btn:active, .send-btn:active {
-            transform: scale(0.95);
-        }
-        
-        .title {
-            font-size: 20px;
-            font-weight: 600;
-        }
-        
-        /* Sidebar */
-        .sidebar {
+        /* Dropdown Menu */
+        .dropdown-menu {
             position: absolute;
-            top: 0;
-            right: -320px;
-            width: 300px;
-            height: 100%;
-            background: var(--surface);
-            box-shadow: -4px 0 20px rgba(0,0,0,0.1);
-            transition: right 0.3s ease;
+            top: 60px;
+            left: 0;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+            width: 250px;
+            display: none;
             z-index: 1000;
-            padding: 24px;
-            overflow-y: auto;
+            overflow: hidden;
         }
         
-        .sidebar.open {
-            right: 0;
+        .dropdown-menu.show {
+            display: block;
         }
         
-        .sidebar-header {
+        .menu-item {
+            padding: 15px 20px;
+            cursor: pointer;
+            transition: background 0.3s;
+            color: #333;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .menu-item:last-child {
+            border-bottom: none;
+        }
+        
+        .menu-item:hover {
+            background: #f5f5f5;
+        }
+        
+        .menu-item.language {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 24px;
-            padding-bottom: 16px;
-            border-bottom: 2px solid var(--border);
         }
         
-        .close-btn {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            border: none;
-            background: var(--border);
-            color: var(--text);
-            font-size: 20px;
+        .language-options {
+            display: none;
+            background: #f9f9f9;
+            padding: 10px 0;
+        }
+        
+        .language-options.show {
+            display: block;
+        }
+        
+        .lang-option {
+            padding: 10px 30px;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: background 0.3s;
         }
         
-        .close-btn:hover {
-            background: var(--secondary);
+        .lang-option:hover {
+            background: #e0e0e0;
+        }
+        
+        .lang-option.active {
+            background: #1a2a6c;
             color: white;
         }
         
-        .sidebar-item {
-            padding: 16px;
-            margin-bottom: 8px;
-            background: var(--background);
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.3s;
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            text-align: center;
+        }
+        
+        .main-content h2 {
+            font-size: 2.5em;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        
+        .search-container {
+            width: 100%;
+            max-width: 800px;
+            background: white;
+            border-radius: 60px;
+            padding: 5px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
             display: flex;
             align-items: center;
-            gap: 12px;
+            border: 1px solid #e0e0e0;
         }
         
-        .sidebar-item:hover {
-            background: var(--primary);
-            color: white;
-            transform: translateX(-4px);
-        }
-        
-        .language-list {
-            margin-top: 8px;
-            margin-right: 20px;
-            display: none;
-        }
-        
-        .language-list.show {
-            display: block;
-        }
-        
-        .language-item {
-            padding: 10px 16px;
-            margin: 4px 0;
-            background: var(--background);
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .language-item:hover {
-            background: var(--primary);
-            color: white;
-        }
-        
-        .language-item.active {
-            background: var(--primary);
-            color: white;
-            font-weight: 600;
-        }
-        
-        /* Answer Area */
-        .answer-area {
+        .search-input {
             flex: 1;
-            overflow-y: auto;
-            padding: 24px;
-            background: var(--background);
-        }
-        
-        .answer-container {
-            background: var(--surface);
-            border-radius: 20px;
-            padding: 24px;
-            box-shadow: 0 4px 6px -2px rgba(0,0,0,0.05);
-            min-height: 200px;
-            white-space: pre-wrap;
-            line-height: 1.8;
-            font-size: 16px;
-        }
-        
-        .domain-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: 600;
-            margin-bottom: 16px;
-        }
-        
-        .ai-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            background: var(--secondary);
-            color: white;
-            border-radius: 20px;
-            font-size: 12px;
-            margin-right: 8px;
-        }
-        
-        /* Input Area */
-        .input-area {
-            background: var(--surface);
-            border-top: 2px solid var(--border);
-            padding: 16px 24px;
-        }
-        
-        .input-container {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 12px;
-        }
-        
-        #question {
-            flex: 1;
-            padding: 16px;
-            border: 2px solid var(--border);
-            border-radius: 16px;
-            font-size: 16px;
-            resize: vertical;
-            min-height: 80px;
-            transition: all 0.3s;
-        }
-        
-        #question:focus {
+            border: none;
             outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 4px rgba(37,99,235,0.1);
+            padding: 20px 30px;
+            font-size: 1.2em;
+            border-radius: 60px;
+            background: transparent;
         }
         
-        .keyboard-toggle {
-            width: 100%;
-            padding: 12px;
-            background: var(--background);
-            border: 2px solid var(--border);
-            border-radius: 12px;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
-            transition: all 0.3s;
-            margin-bottom: 12px;
+        .search-input::placeholder {
+            color: #999;
+            font-size: 1.1em;
         }
         
-        .keyboard-toggle:hover {
-            background: var(--primary);
+        .search-btn {
+            background: black;
             color: white;
-            border-color: var(--primary);
-        }
-        
-        .math-keyboard {
-            display: none;
-            background: var(--background);
-            border-radius: 16px;
-            padding: 16px;
-            margin-bottom: 12px;
-        }
-        
-        .math-keyboard.show {
-            display: block;
-        }
-        
-        .keyboard-grid {
-            display: grid;
-            grid-template-columns: repeat(6, 1fr);
-            gap: 8px;
-        }
-        
-        .key-btn {
-            aspect-ratio: 1;
-            border: 2px solid var(--border);
-            border-radius: 12px;
-            background: var(--surface);
-            font-size: 20px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            color: var(--text);
-        }
-        
-        .key-btn:hover {
-            background: var(--primary);
-            color: white;
-            border-color: var(--primary);
-            transform: scale(1.05);
-        }
-        
-        .key-btn:active {
-            transform: scale(0.95);
-        }
-        
-        /* Loading */
-        .loading {
-            display: inline-block;
-            width: 24px;
-            height: 24px;
-            border: 3px solid var(--border);
-            border-top-color: var(--primary);
+            border: none;
+            width: 60px;
+            height: 60px;
             border-radius: 50%;
-            animation: spin 1s linear infinite;
+            margin-right: 10px;
+            cursor: pointer;
+            font-size: 1.5em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .search-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        
+        /* Result Area */
+        .result-area {
+            width: 100%;
+            max-width: 800px;
+            margin-top: 30px;
+            background: #f8f9fa;
+            border-radius: 20px;
+            padding: 30px;
+            text-align: right;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            display: none;
+        }
+        
+        .answer {
+            font-size: 1.2em;
+            line-height: 1.8;
+            white-space: pre-wrap;
+            color: #333;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            font-size: 1.2em;
+            color: #1a2a6c;
+        }
+        
+        .loading:after {
+            content: "⚡";
+            animation: spin 1s infinite;
         }
         
         @keyframes spin {
-            to { transform: rotate(360deg); }
+            0% { content: "⚡"; }
+            50% { content: "✨"; }
+            100% { content: "⚡"; }
+        }
+        
+        .error {
+            color: #dc3545;
+            padding: 15px;
+            background: #f8d7da;
+            border-radius: 8px;
+            font-size: 1.1em;
         }
         
         /* Responsive */
         @media (max-width: 768px) {
-            .app-container {
-                height: 95vh;
-                border-radius: 24px;
+            .header {
+                padding: 15px 20px;
             }
             
-            .keyboard-grid {
-                grid-template-columns: repeat(4, 1fr);
+            .logo h1 {
+                font-size: 1.4em;
             }
             
-            .sidebar {
-                width: 280px;
+            .main-content h2 {
+                font-size: 1.8em;
+            }
+            
+            .search-input {
+                padding: 15px 20px;
+                font-size: 1em;
+            }
+            
+            .search-btn {
+                width: 50px;
+                height: 50px;
+                font-size: 1.2em;
             }
         }
     </style>
 </head>
 <body>
-    <div class="app-container">
-        <!-- Header -->
-        <div class="header">
-            <button class="menu-btn" onclick="toggleSidebar()">☰</button>
-            <div class="title" id="app-title">المساعد الهندسي</div>
-            <button class="send-btn" onclick="sendQuestion()">➡️</button>
+    <div class="header">
+        <div class="logo">
+            <h1>🔧 المساعد الهندسي</h1>
         </div>
-        
-        <!-- Sidebar -->
-        <div class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <h3 id="menu-title">القائمة</h3>
-                <button class="close-btn" onclick="toggleSidebar()">✕</button>
-            </div>
-            
-            <div class="sidebar-item" onclick="toggleLanguages()">
-                <span>🌐</span>
-                <span id="language-label">اللغة</span>
-            </div>
-            <div class="language-list" id="language-list">
-                <div class="language-item active" onclick="changeLanguage('ar')">🇸🇦 العربية</div>
-                <div class="language-item" onclick="changeLanguage('en')">🇬🇧 English</div>
-                <div class="language-item" onclick="changeLanguage('de')">🇩🇪 Deutsch</div>
-                <div class="language-item" onclick="changeLanguage('tr')">🇹🇷 Türkçe</div>
-                <div class="language-item" onclick="changeLanguage('fr')">🇫🇷 Français</div>
-                <div class="language-item" onclick="changeLanguage('ru')">🇷🇺 Русский</div>
-            </div>
-            
-            <div class="sidebar-item" onclick="showHelp()">
-                <span>❓</span>
-                <span id="help-label">المساعدة</span>
-            </div>
-            
-            <div class="sidebar-item" onclick="showAbout()">
-                <span>ℹ️</span>
-                <span id="about-label">عن التطبيق</span>
-            </div>
-        </div>
-        
-        <!-- Answer Area -->
-        <div class="answer-area" id="answerArea">
-            <div class="answer-container" id="answerContainer">
-                <div id="answerContent">اكتب سؤالك واضغط على السهم للإرسال</div>
-            </div>
-        </div>
-        
-        <!-- Input Area -->
-        <div class="input-area">
-            <div class="input-container">
-                <textarea id="question" rows="3" placeholder="اكتب سؤالك هنا..."></textarea>
-            </div>
-            
-            <button class="keyboard-toggle" onclick="toggleKeyboard()" id="keyboardBtn">
-                ⌨️ إظهار لوحة المفاتيح
-            </button>
-            
-            <div class="math-keyboard" id="mathKeyboard">
-                <div class="keyboard-grid">
-                    <!-- الصف الأول -->
-                    <button class="key-btn" onclick="insertSymbol('7')">7</button>
-                    <button class="key-btn" onclick="insertSymbol('8')">8</button>
-                    <button class="key-btn" onclick="insertSymbol('9')">9</button>
-                    <button class="key-btn" onclick="insertSymbol('/')">÷</button>
-                    <button class="key-btn" onclick="insertSymbol('^')">^</button>
-                    <button class="key-btn" onclick="insertSymbol('√')">√</button>
-                    
-                    <!-- الصف الثاني -->
-                    <button class="key-btn" onclick="insertSymbol('4')">4</button>
-                    <button class="key-btn" onclick="insertSymbol('5')">5</button>
-                    <button class="key-btn" onclick="insertSymbol('6')">6</button>
-                    <button class="key-btn" onclick="insertSymbol('*')">×</button>
-                    <button class="key-btn" onclick="insertSymbol('(')">(</button>
-                    <button class="key-btn" onclick="insertSymbol(')')">)</button>
-                    
-                    <!-- الصف الثالث -->
-                    <button class="key-btn" onclick="insertSymbol('1')">1</button>
-                    <button class="key-btn" onclick="insertSymbol('2')">2</button>
-                    <button class="key-btn" onclick="insertSymbol('3')">3</button>
-                    <button class="key-btn" onclick="insertSymbol('-')">−</button>
-                    <button class="key-btn" onclick="insertSymbol('∫')">∫</button>
-                    <button class="key-btn" onclick="insertSymbol('Σ')">Σ</button>
-                    
-                    <!-- الصف الرابع -->
-                    <button class="key-btn" onclick="insertSymbol('0')">0</button>
-                    <button class="key-btn" onclick="insertSymbol('.')">.</button>
-                    <button class="key-btn" onclick="insertSymbol('=')">=</button>
-                    <button class="key-btn" onclick="insertSymbol('+')">+</button>
-                    <button class="key-btn" onclick="insertSymbol('π')">π</button>
-                    <button class="key-btn" onclick="insertSymbol('∞')">∞</button>
-                    
-                    <!-- الصف الخامس -->
-                    <button class="key-btn" onclick="insertSymbol('sin')">sin</button>
-                    <button class="key-btn" onclick="insertSymbol('cos')">cos</button>
-                    <button class="key-btn" onclick="insertSymbol('tan')">tan</button>
-                    <button class="key-btn" onclick="insertSymbol('log')">log</button>
-                    <button class="key-btn" onclick="insertSymbol('ln')">ln</button>
-                    <button class="key-btn" onclick="insertSymbol('e')">e</button>
+        <div class="menu-container">
+            <div class="menu-icon" onclick="toggleMenu()">☰</div>
+            <div class="dropdown-menu" id="dropdownMenu">
+                <div class="menu-item language" onclick="toggleLanguages(event)">
+                    <span>🌐 اللغة</span>
+                    <span>▼</span>
+                </div>
+                <div class="language-options" id="languageOptions">
+                    <div class="lang-option active" onclick="changeLanguage('ar')">🇸🇦 العربية</div>
+                    <div class="lang-option" onclick="changeLanguage('en')">🇬🇧 English</div>
+                    <div class="lang-option" onclick="changeLanguage('tr')">🇹🇷 Türkçe</div>
+                    <div class="lang-option" onclick="changeLanguage('fr')">🇫🇷 Français</div>
+                    <div class="lang-option" onclick="changeLanguage('de')">🇩🇪 Deutsch</div>
+                    <div class="lang-option" onclick="changeLanguage('ru')">🇷🇺 Русский</div>
+                </div>
+                <div class="menu-item" onclick="showHelp()">
+                    <span>❓ المساعدة</span>
+                </div>
+                <div class="menu-item" onclick="showAbout()">
+                    <span>ℹ️ عن التطبيق</span>
                 </div>
             </div>
         </div>
     </div>
     
+    <div class="main-content">
+        <h2>اسأل أي سؤال مختص في الهندسة</h2>
+        
+        <div class="search-container">
+            <input type="text" class="search-input" id="question" placeholder="مثال: كيف يعمل محرك DC؟" onkeypress="handleKeyPress(event)">
+            <button class="search-btn" onclick="ask()">➡️</button>
+        </div>
+        
+        <div id="result" class="result-area"></div>
+    </div>
+    
     <script>
-        // ============================================================
-        // المتغيرات العامة
-        // ============================================================
+        let currentQuestionId = null;
         let currentLanguage = 'ar';
-        let isKeyboardVisible = false;
         
-        const translations = {
-            'ar': {
-                'title': 'المساعد الهندسي',
-                'menu': 'القائمة',
-                'language': 'اللغة',
-                'help': 'المساعدة',
-                'about': 'عن التطبيق',
-                'keyboard_show': '⌨️ إظهار لوحة المفاتيح',
-                'keyboard_hide': '⌨️ إخفاء لوحة المفاتيح',
-                'placeholder': 'اكتب سؤالك هنا...',
-                'default_answer': 'اكتب سؤالك واضغط على السهم للإرسال',
-                'loading': '⏳ جاري البحث عن الإجابة...'
-            },
-            'en': {
-                'title': 'Engineering Assistant',
-                'menu': 'Menu',
-                'language': 'Language',
-                'help': 'Help',
-                'about': 'About',
-                'keyboard_show': '⌨️ Show Keyboard',
-                'keyboard_hide': '⌨️ Hide Keyboard',
-                'placeholder': 'Type your question here...',
-                'default_answer': 'Type your question and press the arrow to send',
-                'loading': '⏳ Searching for answer...'
-            },
-            'de': {
-                'title': 'Engineering-Assistent',
-                'menu': 'Menü',
-                'language': 'Sprache',
-                'help': 'Hilfe',
-                'about': 'Über',
-                'keyboard_show': '⌨️ Tastatur anzeigen',
-                'keyboard_hide': '⌨️ Tastatur ausblenden',
-                'placeholder': 'Frage eingeben...',
-                'default_answer': 'Frage eingeben und Pfeil drücken',
-                'loading': '⏳ Suche nach Antwort...'
-            },
-            'tr': {
-                'title': 'Mühendislik Asistanı',
-                'menu': 'Menü',
-                'language': 'Dil',
-                'help': 'Yardım',
-                'about': 'Hakkında',
-                'keyboard_show': '⌨️ Klavyeyi Göster',
-                'keyboard_hide': '⌨️ Klavyeyi Gizle',
-                'placeholder': 'Sorunuzu yazın...',
-                'default_answer': 'Sorunuzu yazın ve oka basın',
-                'loading': '⏳ Cevap aranıyor...'
-            },
-            'fr': {
-                'title': 'Assistant d\'ingénierie',
-                'menu': 'Menu',
-                'language': 'Langue',
-                'help': 'Aide',
-                'about': 'À propos',
-                'keyboard_show': '⌨️ Afficher clavier',
-                'keyboard_hide': '⌨️ Cacher clavier',
-                'placeholder': 'Tapez votre question...',
-                'default_answer': 'Tapez votre question et appuyez sur la flèche',
-                'loading': '⏳ Recherche de réponse...'
-            },
-            'ru': {
-                'title': 'Инженерный помощник',
-                'menu': 'Меню',
-                'language': 'Язык',
-                'help': 'Помощь',
-                'about': 'О приложении',
-                'keyboard_show': '⌨️ Показать клавиатуру',
-                'keyboard_hide': '⌨️ Скрыть клавиатуру',
-                'placeholder': 'Введите вопрос...',
-                'default_answer': 'Введите вопрос и нажмите стрелку',
-                'loading': '⏳ Поиск ответа...'
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                ask();
             }
-        };
-        
-        // ============================================================
-        // دوال الواجهة
-        // ============================================================
-        function toggleSidebar() {
-            document.getElementById('sidebar').classList.toggle('open');
         }
         
-        function toggleLanguages() {
-            document.getElementById('language-list').classList.toggle('show');
+        function toggleMenu() {
+            document.getElementById('dropdownMenu').classList.toggle('show');
+        }
+        
+        function toggleLanguages(event) {
+            event.stopPropagation();
+            document.getElementById('languageOptions').classList.toggle('show');
         }
         
         function changeLanguage(lang) {
             currentLanguage = lang;
             
-            // تحديث اللغة النشطة
-            document.querySelectorAll('.language-item').forEach(item => {
-                item.classList.remove('active');
+            // تحديث النشط
+            document.querySelectorAll('.lang-option').forEach(opt => {
+                opt.classList.remove('active');
             });
             event.target.classList.add('active');
             
-            // تحديث النصوص
-            document.getElementById('app-title').textContent = translations[lang].title;
-            document.getElementById('menu-title').textContent = translations[lang].menu;
-            document.getElementById('language-label').textContent = translations[lang].language;
-            document.getElementById('help-label').textContent = translations[lang].help;
-            document.getElementById('about-label').textContent = translations[lang].about;
-            document.getElementById('keyboardBtn').textContent = isKeyboardVisible ? 
-                translations[lang].keyboard_hide : translations[lang].keyboard_show;
-            document.getElementById('question').placeholder = translations[lang].placeholder;
-            document.getElementById('answerContent').textContent = translations[lang].default_answer;
+            // إخفاء القوائم
+            document.getElementById('languageOptions').classList.remove('show');
+            document.getElementById('dropdownMenu').classList.remove('show');
             
-            // تحديث اتجاه الصفحة
-            document.body.style.direction = lang === 'ar' ? 'rtl' : 'ltr';
+            // يمكن إضافة ترجمة الواجهة هنا لاحقاً
+        }
+        
+        function showHelp() {
+            document.getElementById('dropdownMenu').classList.remove('show');
             
-            toggleSidebar();
+            const resultDiv = document.getElementById('result');
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = `
+                <div class="answer">
+                    <h3>❓ كيفية استخدام المساعد الهندسي</h3>
+                    <p>• اكتب سؤالك في مربع النص ثم اضغط على زر الإرسال أو Enter</p>
+                    <p>• يمكنك السؤال عن مواضيع الهندسة المختلفة:</p>
+                    <ul>
+                        <li>ميكاترونكس</li>
+                        <li>ميكانيكا</li>
+                        <li>كهرباء وإلكترونيات</li>
+                        <li>محركات وتحكم</li>
+                        <li>رياضيات وفيزياء</li>
+                        <li>PLC وأنظمة أتمتة</li>
+                    </ul>
+                    <p>• التطبيق يدعم 6 لغات: العربية، الإنجليزية، التركية، الفرنسية، الألمانية، الروسية</p>
+                    <p>• يمكنك تقييم الإجابة باستخدام 👍 أو 👎</p>
+                </div>
+            `;
         }
         
-        function toggleKeyboard() {
-            const keyboard = document.getElementById('mathKeyboard');
-            isKeyboardVisible = !isKeyboardVisible;
-            keyboard.classList.toggle('show');
-            document.getElementById('keyboardBtn').textContent = isKeyboardVisible ?
-                translations[currentLanguage].keyboard_hide : translations[currentLanguage].keyboard_show;
-        }
-        
-        function insertSymbol(symbol) {
-            const question = document.getElementById('question');
-            const start = question.selectionStart;
-            const end = question.selectionEnd;
-            const text = question.value;
+        function showAbout() {
+            document.getElementById('dropdownMenu').classList.remove('show');
             
-            question.value = text.substring(0, start) + symbol + text.substring(end);
-            question.focus();
-            question.selectionStart = question.selectionEnd = start + symbol.length;
+            const resultDiv = document.getElementById('result');
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = `
+                <div class="answer">
+                    <h3>ℹ️ عن المساعد الهندسي</h3>
+                    <p><strong>الإصدار:</strong> 5.1</p>
+                    <p><strong>التخصص:</strong> الهندسة بجميع فروعها</p>
+                    <p><strong>المميزات:</strong></p>
+                    <ul>
+                        <li>ذاكرة دائمة تحفظ جميع الأسئلة والأجوبة</li>
+                        <li>7 نماذج ذكاء اصطناعي تعمل خلف الكواليس</li>
+                        <li>دعم 6 لغات مختلفة</li>
+                        <li>تقييم الإجابات لتحسين الجودة</li>
+                        <li>اقتراحات لأسئلة مشابهة</li>
+                    </ul>
+                    <p><strong>اللغات المدعومة:</strong> العربية، الإنجليزية، التركية، الفرنسية، الألمانية، الروسية</p>
+                    <p><strong>تم التطوير:</strong> بواسطة فريق ميكاترونكس</p>
+                </div>
+            `;
         }
         
-        async function showHelp() {
-            try {
-                const response = await fetch(`/api/help?lang=${currentLanguage}`);
-                const data = await response.json();
-                document.getElementById('answerContent').innerHTML = data.help.replace(/\n/g, '<br>');
-                toggleSidebar();
-            } catch (error) {
-                document.getElementById('answerContent').innerHTML = '❌ خطأ في تحميل المساعدة';
-            }
-        }
-        
-        async function showAbout() {
-            try {
-                const response = await fetch(`/api/help?lang=${currentLanguage}`);
-                const data = await response.json();
-                document.getElementById('answerContent').innerHTML = data.about.replace(/\n/g, '<br>');
-                toggleSidebar();
-            } catch (error) {
-                document.getElementById('answerContent').innerHTML = '❌ خطأ في تحميل معلومات التطبيق';
-            }
-        }
-        
-        async function sendQuestion() {
+        async function ask() {
             const question = document.getElementById('question').value.trim();
+            const resultDiv = document.getElementById('result');
+            
             if (!question) {
-                alert(translations[currentLanguage].placeholder || 'الرجاء كتابة سؤال');
+                alert('الرجاء كتابة سؤال');
                 return;
             }
             
-            document.getElementById('answerContent').innerHTML = translations[currentLanguage].loading;
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = '<div class="loading"></div>';
             
             try {
-                // ✅ تم التعديل هنا: من '/api/ask' إلى '/api/solve'
-                const response = await fetch('/api/solve', {
+                const response = await fetch('/api/ask', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
+                        'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
+                    body: JSON.stringify({ 
                         question: question,
-                        language: currentLanguage
+                        language: currentLanguage 
                     })
                 });
                 
                 const data = await response.json();
                 
-                if (data.success) {
-                    let answerHtml = '';
+                if (data.answer) {
+                    // عرض الإجابة فقط بدون أي معلومات إضافية
+                    resultDiv.innerHTML = `<div class="answer">${data.answer}</div>`;
                     
-                    if (data.level) {
-                        const levelNames = {
-                            'simple': '🧮 آلة حاسبة',
-                            'advanced': '🤖 Gemini',
-                            'memory': '💾 ذاكرة'
-                        };
-                        answerHtml += `<div class="domain-badge">📚 ${levelNames[data.level] || data.level}</div>`;
+                    // إذا كان هناك معرف للسؤال، نخزنه للتقييم
+                    if (data.question_id) {
+                        currentQuestionId = data.question_id;
                     }
-                    
-                    if (data.from_memory) {
-                        answerHtml += `<span class="ai-badge">💾 من الذاكرة (${data.uses || 1})</span>`;
-                    }
-                    
-                    answerHtml += data.answer.replace(/\n/g, '<br>');
-                    document.getElementById('answerContent').innerHTML = answerHtml;
                 } else {
-                    document.getElementById('answerContent').innerHTML = `<div style="color: #ef4444;">❌ ${data.error || 'حدث خطأ'}</div>`;
+                    resultDiv.innerHTML = `<div class="error">${data.error || 'حدث خطأ'}</div>`;
                 }
             } catch (error) {
-                document.getElementById('answerContent').innerHTML = `<div style="color: #ef4444;">❌ خطأ في الاتصال بالخادم</div>`;
+                resultDiv.innerHTML = `<div class="error">❌ لا يمكن الاتصال بالخادم</div>`;
             }
         }
         
-        // إرسال السؤال بالضغط على Enter
-        document.getElementById('question').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendQuestion();
-            }
-        });
-        
-        // تحميل حالة التطبيق عند البدء
-        async function loadStatus() {
-            try {
-                const response = await fetch('/api/memory/stats');
-                const data = await response.json();
-                console.log('App stats:', data);
-            } catch (error) {
-                console.error('Failed to load stats:', error);
+        // إغلاق القائمة عند النقر خارجها
+        window.onclick = function(event) {
+            if (!event.target.closest('.menu-container')) {
+                document.getElementById('dropdownMenu').classList.remove('show');
+                document.getElementById('languageOptions').classList.remove('show');
             }
         }
-        
-        loadStatus();
     </script>
 </body>
 </html>
