@@ -1,5 +1,5 @@
 """
-Mechatronics Assistant v5.0 - الإصدار المخفي
+Mechatronics Assistant v5.1 - الإصدار المخفي (مصحح)
 المستخدم لا يعلم بوجود نماذج متعددة - نظام واحد خلف الكواليس
 """
 
@@ -23,6 +23,11 @@ import queue
 from typing import Optional, Dict, Any
 import re
 import random
+import sys
+import io
+
+# حل مشكلة Unicode في CMD
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 # تحميل المتغيرات من ملف .env
 load_dotenv()
@@ -249,15 +254,30 @@ class EternalMemory:
     def update_model_stats(self, model, success=True, response_time=0):
         with self.query_lock:
             if success:
-                self.conn.execute("""
-                    UPDATE model_stats SET
-                        total_calls = total_calls + 1,
-                        successful_calls = successful_calls + 1,
-                        total_response_time = total_response_time + ?,
-                        avg_response_time = total_response_time / successful_calls,
-                        last_used = CURRENT_TIMESTAMP
-                    WHERE model = ?
-                """, (response_time, model))
+                # جلب البيانات الحالية
+                cur = self.conn.execute("SELECT successful_calls, total_response_time FROM model_stats WHERE model = ?", (model,))
+                row = cur.fetchone()
+                
+                if row:
+                    successful = row[0] + 1
+                    total_time = row[1] + response_time
+                    avg_time = total_time / successful if successful > 0 else 0
+                    
+                    self.conn.execute("""
+                        UPDATE model_stats SET
+                            total_calls = total_calls + 1,
+                            successful_calls = successful_calls + 1,
+                            total_response_time = total_response_time + ?,
+                            avg_response_time = ?,
+                            last_used = CURRENT_TIMESTAMP
+                        WHERE model = ?
+                    """, (response_time, avg_time, model))
+                else:
+                    self.conn.execute("""
+                        INSERT INTO model_stats 
+                        (model, total_calls, successful_calls, total_response_time, avg_response_time, last_used)
+                        VALUES (?, 1, 1, ?, ?, CURRENT_TIMESTAMP)
+                    """, (model, response_time, response_time))
             else:
                 self.conn.execute("""
                     UPDATE model_stats SET
@@ -273,10 +293,41 @@ class EternalMemory:
         with self.query_lock:
             cur = self.conn.execute("""
                 SELECT model FROM model_stats 
-                ORDER BY priority ASC, successful_calls DESC, avg_response_time ASC
+                ORDER BY priority ASC, successful_calls DESC, 
+                         CASE WHEN avg_response_time IS NULL THEN 999999 ELSE avg_response_time END ASC
                 LIMIT ?
             """, (limit,))
             return [row[0] for row in cur.fetchall()]
+    
+    def get_stats(self):
+        """إحصائيات شاملة للذاكرة"""
+        with self.query_lock:
+            # عدد الأسئلة الكلي
+            cur = self.conn.execute("SELECT COUNT(*) as total FROM questions")
+            total = cur.fetchone()[0]
+            
+            # عدد التصنيفات
+            cur = self.conn.execute("SELECT COUNT(DISTINCT category) as categories FROM questions")
+            categories = cur.fetchone()[0]
+            
+            # إجمالي الاستخدامات
+            cur = self.conn.execute("SELECT SUM(times_used) as uses FROM questions")
+            total_uses = cur.fetchone()[0] or 0
+            
+            # إحصائيات إضافية
+            cur = self.conn.execute("SELECT SUM(positive_ratings) as likes FROM questions")
+            likes = cur.fetchone()[0] or 0
+            
+            cur = self.conn.execute("SELECT SUM(negative_ratings) as dislikes FROM questions")
+            dislikes = cur.fetchone()[0] or 0
+            
+            return {
+                'total_questions': total,
+                'categories': categories,
+                'total_uses': total_uses,
+                'likes': likes,
+                'dislikes': dislikes
+            }
 
 memory = EternalMemory()
 
@@ -481,12 +532,13 @@ def memory_stats():
 
 if __name__ == '__main__':
     print("\n" + "="*70)
-    print("🔧 MECHATRONICS ASSISTANT v5.0 - الإصدار المخفي")
+    print("🔧 MECHATRONICS ASSISTANT v5.1 - الإصدار المخفي (مصحح)")
     print("="*70)
     print("✅ 7 نماذج AI تعمل خلف الكواليس")
     print("✅ المستخدم لا يرى أي خيارات")
     print("✅ تبديل ذكي تلقائي بين النماذج")
     print("✅ أولوية النماذج قابلة للتعديل")
+    print("✅ جميع الأخطاء مصححة")
     print("="*70)
     print(f"🌐 http://127.0.0.1:5000")
     print("="*70 + "\n")
