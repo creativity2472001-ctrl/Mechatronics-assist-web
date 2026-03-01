@@ -41,14 +41,21 @@ handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s -
 logger.addHandler(handler)
 
 # ============================================================
-# 🔑 إعدادات الـ APIs
+# 🔑 إعدادات الـ APIs (من متغيرات CMD)
 # ============================================================
-GEMINI_KEY = os.getenv('GEMINI_KEY')
-OPENROUTER_KEY = os.getenv('OPENROUTER_KEY')
-GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
+GEMINI_KEY = os.environ.get('GEMINI_KEY')
+OPENROUTER_KEY = os.environ.get('OPENROUTER_KEY')
+GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
 
 if not GEMINI_KEY or not OPENROUTER_KEY or not GITHUB_TOKEN:
-    logger.error("❌ المفاتيح غير موجودة! أضفها في ملف .env")
+    print("\n" + "="*60)
+    print("❌ المفاتيح غير موجودة!")
+    print("="*60)
+    print("👉 ضع المتغيرات في CMD قبل التشغيل:")
+    print("   set GEMINI_KEY=AIzaSyBErJLXTIia9hOhEhGNXQM7IB4zqmAbwTI")
+    print("   set OPENROUTER_KEY=sk-or-v1-xxxxxxxxxxxx")
+    print("   set GITHUB_TOKEN=github_pat_xxxxxxxxxxxx")
+    print("="*60 + "\n")
     exit(1)
 
 # تهيئة Gemini
